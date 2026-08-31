@@ -10,9 +10,10 @@ namespace WindowsAgent;
 
 /// <summary>
 /// Owns a non-activating, click-through activity cue around each monitor.
-/// The frame and optional synthetic pointer are deliberately visual only: the
-/// overlay does not dim or lock the center of the desktop, never becomes the
-/// input target, and never moves the user's real cursor.
+/// The control frame, stable status label and optional synthetic pointer are
+/// deliberately visual only: the overlay does not dim or lock the center of
+/// the desktop, never becomes the input target, and never moves the user's
+/// real cursor.
 /// </summary>
 internal sealed class DesktopActivityOverlay : IDisposable
 {
@@ -71,7 +72,9 @@ internal sealed class DesktopActivityOverlay : IDisposable
         }
     }
 
-    internal bool TryShow(string label)
+    internal bool TryShow(string label) => TryShow(label, frameVisible: true);
+
+    internal bool TryShow(string label, bool frameVisible)
     {
         lock (_gate)
         {
@@ -93,6 +96,7 @@ internal sealed class DesktopActivityOverlay : IDisposable
                 foreach (var window in _windows.Values)
                 {
                     window.Label = _label;
+                    window.FrameVisible = frameVisible;
                     window.SetActionTrace(null, string.Empty);
                     window.Show();
                 }
@@ -102,6 +106,34 @@ internal sealed class DesktopActivityOverlay : IDisposable
                 _lastError = null;
             }
             return shown;
+        }
+    }
+
+    internal bool TrySetVisualState(string label, bool frameVisible)
+    {
+        lock (_gate)
+        {
+            if (_disposed || _threadId == 0)
+            {
+                return false;
+            }
+
+            _label = string.IsNullOrWhiteSpace(label) ? "AGENT 等待下一步" : label.Trim();
+            var updated = InvokeLocked(() =>
+            {
+                ReconcileMonitorsOnUiThread();
+                foreach (var window in _windows.Values)
+                {
+                    window.Label = _label;
+                    window.FrameVisible = frameVisible;
+                    window.Invalidate();
+                }
+            });
+            if (updated)
+            {
+                _lastError = null;
+            }
+            return updated;
         }
     }
 
@@ -523,6 +555,7 @@ internal sealed class DesktopActivityOverlay : IDisposable
         private readonly string _monitorName;
         private readonly Rectangle _bounds;
         private readonly bool _showLabel;
+        private bool _frameVisible = true;
         private int _phase;
         private System.Drawing.Point? _actionPoint;
         private string _actionLabel = string.Empty;
@@ -537,16 +570,30 @@ internal sealed class DesktopActivityOverlay : IDisposable
 
         internal IntPtr Handle { get; private set; }
         internal string Label { get; set; }
+        internal bool FrameVisible
+        {
+            get => _frameVisible;
+            set
+            {
+                _frameVisible = value;
+                Invalidate();
+            }
+        }
         internal bool CaptureExcluded { get; private set; }
+
+        internal void Invalidate()
+        {
+            if (Handle != IntPtr.Zero)
+            {
+                NativeMethods.InvalidateRect(Handle, IntPtr.Zero, false);
+            }
+        }
 
         internal void SetActionTrace(System.Drawing.Point? screenPoint, string label)
         {
             _actionPoint = screenPoint;
             _actionLabel = label;
-            if (Handle != IntPtr.Zero)
-            {
-                NativeMethods.InvalidateRect(Handle, IntPtr.Zero, false);
-            }
+            Invalidate();
         }
 
         internal void Create()
@@ -612,7 +659,7 @@ internal sealed class DesktopActivityOverlay : IDisposable
             {
                 throw new InvalidOperationException($"The activity overlay did not become visible ({Marshal.GetLastWin32Error()}).");
             }
-            NativeMethods.InvalidateRect(Handle, IntPtr.Zero, false);
+            Invalidate();
         }
 
         internal void Hide()
@@ -661,6 +708,12 @@ internal sealed class DesktopActivityOverlay : IDisposable
 
         private IntPtr HandleTimer()
         {
+            if (!_frameVisible && _actionPoint is null)
+            {
+                // The idle panel is intentionally stable; animation belongs
+                // to the active control cue and action trace only.
+                return IntPtr.Zero;
+            }
             _phase = (_phase + 3) % 360;
             NativeMethods.InvalidateRect(Handle, IntPtr.Zero, false);
             return IntPtr.Zero;
@@ -686,20 +739,23 @@ internal sealed class DesktopActivityOverlay : IDisposable
                 graphics.TextRenderingHint = TextRenderingHint.ClearTypeGridFit;
                 graphics.Clear(Color.Magenta);
 
-                var client = new Rectangle(0, 0, _bounds.Width, _bounds.Height);
-                var frame = new Rectangle(
-                    FrameThickness / 2,
-                    FrameThickness / 2,
-                    Math.Max(1, client.Width - FrameThickness),
-                    Math.Max(1, client.Height - FrameThickness));
                 var first = HsvToColor((_phase + 195) % 360, 0.78, 1.0, 235);
                 var second = HsvToColor((_phase + 315) % 360, 0.78, 1.0, 235);
-                using (var gradient = new LinearGradientBrush(frame, first, second, 25f))
+                if (_frameVisible)
                 {
-                    using var glow = new Pen(Color.FromArgb(70, first), FrameThickness + 7);
-                    using var pen = new Pen(gradient, FrameThickness);
-                    graphics.DrawRectangle(glow, frame);
-                    graphics.DrawRectangle(pen, frame);
+                    var client = new Rectangle(0, 0, _bounds.Width, _bounds.Height);
+                    var frame = new Rectangle(
+                        FrameThickness / 2,
+                        FrameThickness / 2,
+                        Math.Max(1, client.Width - FrameThickness),
+                        Math.Max(1, client.Height - FrameThickness));
+                    using (var gradient = new LinearGradientBrush(frame, first, second, 25f))
+                    {
+                        using var glow = new Pen(Color.FromArgb(70, first), FrameThickness + 7);
+                        using var pen = new Pen(gradient, FrameThickness);
+                        graphics.DrawRectangle(glow, frame);
+                        graphics.DrawRectangle(pen, frame);
+                    }
                 }
 
                 if (_showLabel)

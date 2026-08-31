@@ -4,11 +4,11 @@ using System.Text.Json.Serialization;
 namespace WindowsAgent;
 
 /// <summary>
-/// Owns one visible live-desktop activity lease. The lease captures the
-/// foreground window before the first agent operation, never activates the
-/// overlay itself, and restores that window only when the outer lease ends.
-/// A Chrome login/risk pause can explicitly replace restoration with a
-/// validated user-attention foreground window.
+/// Owns one visible live-desktop activity lease and its session-scoped status
+/// panel. The lease captures the foreground window before the first agent
+/// operation, never activates the overlay itself, and restores that window
+/// only when the outer lease ends. A Chrome login/risk pause can explicitly
+/// replace restoration with a validated user-attention foreground window.
 /// </summary>
 internal sealed class DesktopActivityCoordinator : IDisposable
 {
@@ -24,6 +24,9 @@ internal sealed class DesktopActivityCoordinator : IDisposable
     private int _depth;
     private bool _overlayRequested;
     private bool _overlayVisible;
+    private bool _statusPanelVisible;
+    private string _status = "idle";
+    private string _statusPanelLabel = "AGENT 等待下一步";
     private bool _actionTraceRequested;
     private bool _actionTraceVisible;
     private Point? _pendingActionPoint;
@@ -38,6 +41,10 @@ internal sealed class DesktopActivityCoordinator : IDisposable
     internal bool ActionTraceRequested => _actionTraceRequested;
     internal string? InteractionId => _interactionId;
     internal string? LastInteractionId => _lastCompletion?.InteractionId;
+    internal string CurrentLabel => _label;
+
+    private const string IdleStatus = "idle";
+    private const string RunningStatus = "running";
 
     internal ActivityResult Enter(string? label, bool showOverlay, bool restoreOriginalWindow, bool overlayRequired = false, bool showActionTrace = false)
     {
@@ -57,11 +64,14 @@ internal sealed class DesktopActivityCoordinator : IDisposable
             _actionTraceRequested = showOverlay && showActionTrace;
             _actionTraceVisible = false;
             _currentAction = null;
+            _status = RunningStatus;
+            _statusPanelLabel = _label;
             _restoreOriginalWindow = restoreOriginalWindow;
             _depth = 1;
             if (showOverlay)
             {
                 _overlayVisible = _overlay.TryShow(_label);
+                _statusPanelVisible = _overlayVisible;
                 if (!_overlayVisible && overlayRequired)
                 {
                     var error = _overlay.LastError ?? "The activity overlay could not be displayed.";
@@ -69,6 +79,11 @@ internal sealed class DesktopActivityCoordinator : IDisposable
                     ResetActiveState();
                     return Failure("ACTIVITY_OVERLAY_REQUIRED", error);
                 }
+            }
+            else
+            {
+                _statusPanelVisible = false;
+                try { _ = _overlay.TryHide(); } catch { }
             }
         }
         else
@@ -79,6 +94,7 @@ internal sealed class DesktopActivityCoordinator : IDisposable
             var previousRestore = _restoreOriginalWindow;
             var previousOverlayRequested = _overlayRequested;
             var previousOverlayVisible = _overlayVisible;
+            var previousStatusPanelVisible = _statusPanelVisible;
             var previousActionTraceRequested = _actionTraceRequested;
             _depth++;
             _restoreOriginalWindow |= restoreOriginalWindow;
@@ -86,9 +102,12 @@ internal sealed class DesktopActivityCoordinator : IDisposable
             if (showOverlay)
             {
                 _overlayRequested = true;
-                if (!_overlayVisible)
+                _status = RunningStatus;
+                _statusPanelLabel = _label;
+                if (!_overlayVisible || !_statusPanelVisible)
                 {
                     _overlayVisible = _overlay.TryShow(NormalizeLabel(label));
+                    _statusPanelVisible = _overlayVisible;
                     if (!_overlayVisible && overlayRequired)
                     {
                         var error = _overlay.LastError ?? "The activity overlay could not be displayed.";
@@ -97,6 +116,7 @@ internal sealed class DesktopActivityCoordinator : IDisposable
                         _restoreOriginalWindow = previousRestore;
                         _overlayRequested = previousOverlayRequested;
                         _overlayVisible = previousOverlayVisible;
+                        _statusPanelVisible = previousStatusPanelVisible;
                         _actionTraceRequested = previousActionTraceRequested;
                         return Failure("ACTIVITY_OVERLAY_REQUIRED", error);
                     }
@@ -116,6 +136,9 @@ internal sealed class DesktopActivityCoordinator : IDisposable
                 Active = false,
                 Ended = false,
                 AlreadyEnded = true,
+                Status = _status,
+                StatusPanelVisible = _statusPanelVisible,
+                StatusPanelLabel = _statusPanelLabel,
                 LastCompletion = _lastCompletion
             };
         }
@@ -147,7 +170,26 @@ internal sealed class DesktopActivityCoordinator : IDisposable
         var cleanupErrors = new List<string>();
 
         ClearPendingActionTrace();
-        if (!_overlay.TryHide() && !string.IsNullOrWhiteSpace(_overlay.LastError))
+        var preserveTerminalStatus = _status is "paused" or "cancelled" or "failed";
+        if (!preserveTerminalStatus)
+        {
+            _status = IdleStatus;
+            _statusPanelLabel = "AGENT 等待下一步";
+        }
+        if (_statusPanelVisible)
+        {
+            // Ending a lease stops the control frame and action trace, but
+            // leaves the stable status panel in place for the next request.
+            if (!_overlay.TrySetVisualState(_statusPanelLabel, frameVisible: false))
+            {
+                if (!string.IsNullOrWhiteSpace(_overlay.LastError))
+                {
+                    cleanupErrors.Add($"STATUS_PANEL_UPDATE_FAILED: {_overlay.LastError}");
+                }
+                _statusPanelVisible = false;
+            }
+        }
+        else if (!_overlay.TryHide() && !string.IsNullOrWhiteSpace(_overlay.LastError))
         {
             cleanupErrors.Add($"OVERLAY_HIDE_FAILED: {_overlay.LastError}");
         }
@@ -215,6 +257,9 @@ internal sealed class DesktopActivityCoordinator : IDisposable
             OverlayRequested = overlayRequested,
             OverlayVisible = false,
             OverlayWasVisible = overlayWasVisible,
+            Status = _status,
+            StatusPanelVisible = _statusPanelVisible,
+            StatusPanelLabel = _statusPanelLabel,
             ActionTraceRequested = actionTraceRequested,
             ActionTraceVisible = actionTraceVisible,
             CurrentAction = currentAction,
@@ -250,15 +295,58 @@ internal sealed class DesktopActivityCoordinator : IDisposable
     {
         if (_depth == 0)
         {
-            return new ActivityResult
+            var completion = _lastCompletion;
+            return (completion is null
+                    ? new ActivityResult()
+                    : completion with { Ended = false, AlreadyEnded = false }) with
             {
                 Active = false,
+                Started = false,
                 Depth = 0,
-                InteractionId = _lastCompletion?.InteractionId,
-                LastCompletion = _lastCompletion
+                InteractionId = completion?.InteractionId,
+                Status = _status,
+                StatusPanelVisible = _statusPanelVisible,
+                StatusPanelLabel = _statusPanelLabel,
+                LastCompletion = completion
             };
         }
         return BuildResult();
+    }
+
+    /// <summary>
+    /// Updates the stable, non-controlling status panel after a lease has
+    /// ended. The panel is deliberately session-scoped and is destroyed only
+    /// by Dispose/close, so adjacent agent requests do not create a visible
+    /// blink or leave the user unsure whether the next request is pending.
+    /// </summary>
+    internal void SetStatus(string status, string? detail = null)
+    {
+        if (_disposed) return;
+
+        _status = status switch
+        {
+            "running" => RunningStatus,
+            "paused" => "paused",
+            "cancelled" => "cancelled",
+            "failed" => "failed",
+            _ => IdleStatus
+        };
+        _statusPanelLabel = _status switch
+        {
+            RunningStatus => NormalizeLabel(detail) == "AGENT 等待下一步" ? "AGENT 操作中" : NormalizeLabel(detail),
+            "paused" => "AGENT 等待用户处理",
+            "cancelled" => "AGENT 已取消",
+            "failed" => "AGENT 操作失败",
+            _ => "AGENT 等待下一步"
+        };
+
+        if (_statusPanelVisible)
+        {
+            if (!_overlay.TrySetVisualState(_statusPanelLabel, frameVisible: _overlayVisible))
+            {
+                _statusPanelVisible = false;
+            }
+        }
     }
 
     public void Dispose()
@@ -278,6 +366,10 @@ internal sealed class DesktopActivityCoordinator : IDisposable
         {
             _disposed = true;
             _overlay.Dispose();
+            _statusPanelVisible = false;
+            _overlayVisible = false;
+            _status = "closed";
+            _statusPanelLabel = "AGENT 已关闭";
         }
     }
 
@@ -293,6 +385,9 @@ internal sealed class DesktopActivityCoordinator : IDisposable
             OverlayRequested = _overlayRequested,
             OverlayVisible = _overlayVisible,
             OverlayWasVisible = _overlayVisible,
+            Status = _status,
+            StatusPanelVisible = _statusPanelVisible,
+            StatusPanelLabel = _statusPanelLabel,
             ActionTraceRequested = _actionTraceRequested,
             ActionTraceVisible = _actionTraceVisible,
             CurrentAction = _currentAction,
@@ -383,7 +478,7 @@ internal sealed class DesktopActivityCoordinator : IDisposable
     internal T CaptureWithoutOverlay<T>(Func<T> capture)
     {
         var hiddenForCapture = false;
-        if (_overlayVisible && !_overlay.IsCaptureExcluded)
+        if ((_overlayVisible || _statusPanelVisible) && !_overlay.IsCaptureExcluded)
         {
             if (!_overlay.TryHide())
             {
@@ -401,7 +496,10 @@ internal sealed class DesktopActivityCoordinator : IDisposable
         {
             if (hiddenForCapture)
             {
-                _overlayVisible = _overlay.TryShow(_label);
+                var frameWasVisible = _overlayVisible;
+                var restored = _overlay.TryShow(_statusPanelVisible ? _statusPanelLabel : _label, frameWasVisible);
+                _overlayVisible = frameWasVisible && restored;
+                _statusPanelVisible = restored;
                 _actionTraceVisible = false;
             }
         }
@@ -541,7 +639,7 @@ internal sealed class DesktopActivityCoordinator : IDisposable
     }
 }
 
-internal sealed class ActivityResult
+internal sealed record ActivityResult
 {
     [JsonPropertyName("active")]
     public bool Active { get; init; }
@@ -561,6 +659,12 @@ internal sealed class ActivityResult
     public bool OverlayVisible { get; init; }
     [JsonPropertyName("overlay_was_visible")]
     public bool OverlayWasVisible { get; init; }
+    [JsonPropertyName("status")]
+    public string Status { get; init; } = "idle";
+    [JsonPropertyName("status_panel_visible")]
+    public bool StatusPanelVisible { get; init; }
+    [JsonPropertyName("status_panel_label")]
+    public string? StatusPanelLabel { get; init; }
     [JsonPropertyName("action_trace_requested")]
     public bool ActionTraceRequested { get; init; }
     [JsonPropertyName("action_trace_visible")]

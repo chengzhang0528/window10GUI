@@ -38,9 +38,31 @@ internal sealed class AutomationEngine
         }
     }
 
+    internal void ReserveCommand()
+    {
+        // The host queues normal requests in input order. Count a request at
+        // admission time, not only when its continuation starts, so an
+        // out-of-band cancel cannot mistake a queued command for an idle
+        // session and let it run after the stop boundary.
+        Interlocked.Increment(ref _activeCommandCount);
+    }
+
     internal object Execute(string method, JsonElement parameters)
     {
-        Interlocked.Increment(ref _activeCommandCount);
+        return ExecuteCommand(method, parameters, commandReserved: false);
+    }
+
+    internal object ExecuteReserved(string method, JsonElement parameters)
+    {
+        return ExecuteCommand(method, parameters, commandReserved: true);
+    }
+
+    private object ExecuteCommand(string method, JsonElement parameters, bool commandReserved)
+    {
+        if (!commandReserved)
+        {
+            Interlocked.Increment(ref _activeCommandCount);
+        }
         try
         {
             lock (_lifecycleGate)
@@ -48,6 +70,30 @@ internal sealed class AutomationEngine
                 try
                 {
                     return ExecuteUnsafe(method, parameters);
+                }
+                catch (AgentException ex)
+                {
+                    // A user-attention pause is a resumable state, not a
+                    // failed operation. Preserve it when the bounded command
+                    // reports its structured pause error. Cancellation is a
+                    // separate terminal state as well: the command's error
+                    // envelope is still returned, but the persistent panel
+                    // must not turn a user stop into an operation failure.
+                    if (ex.Code == "ACTIVITY_CANCELLED" || IsCancellationRequested)
+                    {
+                        _session.Activity.SetStatus("cancelled");
+                    }
+                    else if (ShouldPersistFailureStatus(method) &&
+                             (!IsChromeMethod(method) || !string.Equals(_session.Activity.Status().Status, "paused", StringComparison.Ordinal)))
+                    {
+                        _session.Activity.SetStatus("failed", ex.Code);
+                    }
+                    throw;
+                }
+                catch
+                {
+                    _session.Activity.SetStatus("failed");
+                    throw;
                 }
                 finally
                 {
@@ -66,7 +112,22 @@ internal sealed class AutomationEngine
         }
         finally
         {
-            Interlocked.Decrement(ref _activeCommandCount);
+            var remainingCommands = Interlocked.Decrement(ref _activeCommandCount);
+            if (remainingCommands == 0 && IsCancellationRequested && !string.Equals(method, "close", StringComparison.Ordinal))
+            {
+                // interaction.status/end are intentionally allowed through a
+                // cancellation boundary, so they do not reach the normal
+                // ForceEnd cleanup block. Clear a stop flag that survived to
+                // the end of the admitted queue before a genuinely new
+                // request is accepted.
+                lock (_lifecycleGate)
+                {
+                    if (Volatile.Read(ref _activeCommandCount) == 0)
+                    {
+                        ResetCancellation();
+                    }
+                }
+            }
         }
     }
 
@@ -100,10 +161,15 @@ internal sealed class AutomationEngine
         {
             lock (_lifecycleGate)
             {
+                var hadActiveInteraction = _session.Activity.IsActive;
                 var interaction = _session.Activity.Leave();
                 if (!interaction.Active) InvalidateObservationState();
+                if (hadActiveInteraction)
+                {
+                    _session.Activity.SetStatus("cancelled");
+                }
                 ResetCancellation();
-                return new { cancellation_requested = false, status = "ended", interaction };
+                return new { cancellation_requested = false, status = "ended", interaction = MergeActivityBoundary(interaction) };
             }
         }
 
@@ -121,6 +187,17 @@ internal sealed class AutomationEngine
     }
 
     private bool IsCancellationRequested => Volatile.Read(ref _cancelRequested) != 0;
+
+    private static bool ShouldPersistFailureStatus(string method)
+    {
+        // These methods validate or manage the lifecycle rather than
+        // performing the leased desktop operation. A rejected control-plane
+        // request (for example, an end with the wrong interaction id) must
+        // not turn an otherwise-running interaction into "failed". Batch and
+        // workflow execution classify their own step failures before they
+        // throw, so the outer command boundary must not overwrite that state.
+        return method is not ("interaction.begin" or "interaction.end" or "interaction.cancel" or "interaction.status" or "actions.batch" or "workflow.run");
+    }
 
     private void ResetCancellation()
     {
@@ -356,9 +433,10 @@ internal sealed class AutomationEngine
         {
             throw new AgentException(activity.ErrorCode ?? "ACTIVITY_START_FAILED", activity.ErrorMessage ?? "Unable to start desktop activity.", true);
         }
+        ChromeUserPause? pause = null;
         try
         {
-            return ExecuteCoreWithPause(method, parameters, out _);
+            return ExecuteCoreWithPause(method, parameters, out pause);
         }
         catch when (IsMutationMethod(method))
         {
@@ -377,6 +455,10 @@ internal sealed class AutomationEngine
                 // provider. Never return a post-action observation as if it
                 // were still safe to use after this lease boundary.
                 InvalidateObservationState();
+            }
+            if (pause is not null)
+            {
+                _session.Activity.SetStatus("paused");
             }
         }
     }
@@ -430,7 +512,18 @@ internal sealed class AutomationEngine
 
     private object ExecuteCoreWithPause(string method, JsonElement parameters, out ChromeUserPause? pause)
     {
-        ThrowIfCancellationRequested();
+        // close is a lifecycle escape hatch and must always be allowed to
+        // drain a pending cancellation; otherwise the cancellation guard
+        // below would prevent the very cleanup command that disposes the
+        // overlay and Chrome provider.
+        if (!string.Equals(method, "close", StringComparison.Ordinal))
+        {
+            ThrowIfCancellationRequested();
+        }
+        if (_session.Activity.IsActive)
+        {
+            _session.Activity.SetStatus("running", _session.Activity.CurrentLabel);
+        }
         WindowEntry? chromeWindow = null;
         if (RequiresInteractiveChromeWindow(method))
         {
@@ -449,7 +542,10 @@ internal sealed class AutomationEngine
                 // result to whichever tab happened to become visible.
                 chromeWindow = ActivateCurrentChromeWindow();
             }
-            ThrowIfCancellationRequested();
+            if (!string.Equals(method, "close", StringComparison.Ordinal))
+            {
+                ThrowIfCancellationRequested();
+            }
             return chromeWindow is null ? result : AddChromeWindowBinding(result, chromeWindow);
         }
         finally
@@ -737,6 +833,7 @@ internal sealed class AutomationEngine
             activity = new
             {
                 overlay = "non_activating_layered_frame",
+                status_panel = "session_scoped_non_activating_label",
                 action_trace = "optional_synthetic_pointer_and_target_highlight_without_moving_the_real_cursor",
                 cancellation = "out_of_band_cooperative_stop_at_action_or_wait_boundaries",
                 restoration = "best_effort_original_foreground_window_unless_user_attention_pause",
@@ -1593,7 +1690,6 @@ internal sealed class AutomationEngine
         // intentionally stale: focus and monitor state may change while the
         // agent owns the visible desktop cue.
         InvalidateObservationState();
-        ResetCancellation();
         var activity = _session.Activity.Enter(label, showOverlay, restoreOriginal, overlayRequired, showActionTrace);
         if (!activity.Active)
         {
@@ -1854,13 +1950,14 @@ internal sealed class AutomationEngine
 
         if (cancelled)
         {
+            _session.Activity.SetStatus("cancelled");
             return new
             {
                 status = "cancelled",
                 cancelled_step = cancellationStep?.StepId,
                 steps = stepResults,
                 pause = userPause,
-                activity = activityResult ?? _session.Activity.Status(),
+                activity = MergeActivityBoundary(activityResult),
                 duration_ms = startedAt.ElapsedMilliseconds,
                 refs_invalidated = refsInvalidated,
                 note = "No later batch step was started; an already-sent input cannot be undone."
@@ -1877,17 +1974,23 @@ internal sealed class AutomationEngine
                 : causeCode is "BATCH_TIMEOUT" or "BATCH_REF_INVALID" or "BATCH_STOPPED_AFTER_FAILURE"
                     ? causeCode
                     : "BATCH_STEP_FAILED";
+            _session.Activity.SetStatus("failed", causeCode);
             var details = new
             {
                 status,
                 failed_step = firstFailedStep?.StepId,
                 cause_code = causeCode,
                 steps = stepResults,
-                activity = activityResult,
+                activity = MergeActivityBoundary(activityResult),
                 duration_ms = startedAt.ElapsedMilliseconds,
                 refs_invalidated = refsInvalidated
             };
             throw new AgentException(topLevelCode, firstFailure.Message, retryable, details);
+        }
+
+        if (userPause is not null)
+        {
+            _session.Activity.SetStatus("paused");
         }
 
         return new
@@ -1895,8 +1998,27 @@ internal sealed class AutomationEngine
             status = userPause is null ? "completed" : "paused",
             steps = stepResults,
             pause = userPause,
-            activity = activityResult ?? _session.Activity.Status(),
+            activity = MergeActivityBoundary(activityResult),
             duration_ms = startedAt.ElapsedMilliseconds
+        };
+    }
+
+    private ActivityResult MergeActivityBoundary(ActivityResult? boundary)
+    {
+        var current = _session.Activity.Status();
+        if (boundary is null)
+        {
+            return current;
+        }
+
+        // Keep the lifecycle metadata from Leave/ForceEnd (ended, restoration,
+        // and overlay_was_visible), while taking the post-boundary status
+        // fields that may have been classified immediately afterwards.
+        return boundary with
+        {
+            Status = current.Status,
+            StatusPanelVisible = current.StatusPanelVisible,
+            StatusPanelLabel = current.StatusPanelLabel
         };
     }
 
@@ -2355,6 +2477,7 @@ internal sealed class AutomationEngine
             try
             {
                 _session.Activity.Dispose();
+                activity = _session.Activity.Status();
             }
             catch (Exception ex)
             {
