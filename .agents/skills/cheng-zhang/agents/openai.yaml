@@ -1,0 +1,7 @@
+interface:
+  display_name: "cheng.zhang"
+  short_description: "按授权语气起草消息，并在逐条审批后发送"
+  default_prompt: "Use $cheng-zhang to collect the current chat context and prepare one style-adapted reply for my approval without sending it."
+
+policy:
+  allow_implicit_invocation: true
