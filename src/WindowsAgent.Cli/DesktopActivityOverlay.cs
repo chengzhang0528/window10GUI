@@ -708,10 +708,11 @@ internal sealed class DesktopActivityOverlay : IDisposable
 
         private IntPtr HandleTimer()
         {
-            if (!_frameVisible && _actionPoint is null)
+            if (_actionPoint is null)
             {
-                // The idle panel is intentionally stable; animation belongs
-                // to the active control cue and action trace only.
+                // A continuously animated full-screen layered frame caused a
+                // visible shimmer. The frame and status panel are static;
+                // only the optional short-lived action trace is animated.
                 return IntPtr.Zero;
             }
             _phase = (_phase + 3) % 360;

@@ -227,8 +227,6 @@ internal sealed class AutomationEngine
 
     private long TraceAction(string method, JsonElement parameters, WindowEntry? preparedChromeWindow = null)
     {
-        if (!_session.Activity.ActionTraceRequested) return 0;
-
         var label = GetString(parameters, "action_label", "action-label", "display_label", "display-label") ?? method switch
         {
             "input.click" or "input.double_click" or "input.right_click" => "点击目标",
@@ -519,10 +517,6 @@ internal sealed class AutomationEngine
         if (!string.Equals(method, "close", StringComparison.Ordinal))
         {
             ThrowIfCancellationRequested();
-        }
-        if (_session.Activity.IsActive)
-        {
-            _session.Activity.SetStatus("running", _session.Activity.CurrentLabel);
         }
         WindowEntry? chromeWindow = null;
         if (RequiresInteractiveChromeWindow(method))
@@ -832,7 +826,7 @@ internal sealed class AutomationEngine
             },
             activity = new
             {
-                overlay = "non_activating_layered_frame",
+                overlay = "non_activating_static_layered_frame_with_2000ms_sliding_idle_hide",
                 status_panel = "session_scoped_non_activating_label",
                 action_trace = "optional_synthetic_pointer_and_target_highlight_without_moving_the_real_cursor",
                 cancellation = "out_of_band_cooperative_stop_at_action_or_wait_boundaries",
@@ -2017,8 +2011,10 @@ internal sealed class AutomationEngine
         return boundary with
         {
             Status = current.Status,
+            OverlayVisible = current.OverlayVisible,
             StatusPanelVisible = current.StatusPanelVisible,
-            StatusPanelLabel = current.StatusPanelLabel
+            StatusPanelLabel = current.StatusPanelLabel,
+            ActionTraceVisible = current.ActionTraceVisible
         };
     }
 

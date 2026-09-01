@@ -15,7 +15,9 @@ internal sealed class DesktopActivityCoordinator : IDisposable
     private readonly DesktopActivityOverlay _overlay = new();
     private readonly object _traceGate = new();
     private System.Threading.Timer? _traceDelayTimer;
+    private System.Threading.Timer? _frameIdleTimer;
     private long _traceGeneration;
+    private long _frameGeneration;
     private ForegroundSnapshot? _originalWindow;
     private ActivityResult? _lastCompletion;
     private DateTimeOffset _startedAt;
@@ -38,13 +40,12 @@ internal sealed class DesktopActivityCoordinator : IDisposable
     private bool _disposed;
 
     internal bool IsActive => _depth > 0;
-    internal bool ActionTraceRequested => _actionTraceRequested;
     internal string? InteractionId => _interactionId;
     internal string? LastInteractionId => _lastCompletion?.InteractionId;
-    internal string CurrentLabel => _label;
 
     private const string IdleStatus = "idle";
     private const string RunningStatus = "running";
+    private const int FrameIdleDelayMs = 2000;
 
     internal ActivityResult Enter(string? label, bool showOverlay, bool restoreOriginalWindow, bool overlayRequired = false, bool showActionTrace = false)
     {
@@ -70,8 +71,11 @@ internal sealed class DesktopActivityCoordinator : IDisposable
             _depth = 1;
             if (showOverlay)
             {
-                _overlayVisible = _overlay.TryShow(_label);
-                _statusPanelVisible = _overlayVisible;
+                var displayed = _statusPanelVisible
+                    ? _overlay.TrySetVisualState(_label, frameVisible: true)
+                    : _overlay.TryShow(_label);
+                _overlayVisible = displayed;
+                _statusPanelVisible = displayed;
                 if (!_overlayVisible && overlayRequired)
                 {
                     var error = _overlay.LastError ?? "The activity overlay could not be displayed.";
@@ -79,9 +83,15 @@ internal sealed class DesktopActivityCoordinator : IDisposable
                     ResetActiveState();
                     return Failure("ACTIVITY_OVERLAY_REQUIRED", error);
                 }
+                if (_overlayVisible)
+                {
+                    RestartFrameIdleTimer();
+                }
             }
             else
             {
+                CancelFrameIdleTimer();
+                _overlayVisible = false;
                 _statusPanelVisible = false;
                 try { _ = _overlay.TryHide(); } catch { }
             }
@@ -106,8 +116,11 @@ internal sealed class DesktopActivityCoordinator : IDisposable
                 _statusPanelLabel = _label;
                 if (!_overlayVisible || !_statusPanelVisible)
                 {
-                    _overlayVisible = _overlay.TryShow(NormalizeLabel(label));
-                    _statusPanelVisible = _overlayVisible;
+                    var displayed = _statusPanelVisible
+                        ? _overlay.TrySetVisualState(NormalizeLabel(label), frameVisible: true)
+                        : _overlay.TryShow(NormalizeLabel(label));
+                    _overlayVisible = displayed;
+                    _statusPanelVisible = displayed;
                     if (!_overlayVisible && overlayRequired)
                     {
                         var error = _overlay.LastError ?? "The activity overlay could not be displayed.";
@@ -120,6 +133,10 @@ internal sealed class DesktopActivityCoordinator : IDisposable
                         _actionTraceRequested = previousActionTraceRequested;
                         return Failure("ACTIVITY_OVERLAY_REQUIRED", error);
                     }
+                }
+                if (_overlayVisible)
+                {
+                    RestartFrameIdleTimer();
                 }
             }
         }
@@ -178,9 +195,10 @@ internal sealed class DesktopActivityCoordinator : IDisposable
         }
         if (_statusPanelVisible)
         {
-            // Ending a lease stops the control frame and action trace, but
-            // leaves the stable status panel in place for the next request.
-            if (!_overlay.TrySetVisualState(_statusPanelLabel, frameVisible: false))
+            // The stable panel remains between adjacent requests. The frame
+            // follows a session-scoped sliding idle deadline, so ending one
+            // short lease does not create a hide/show flash before the next.
+            if (!_overlay.TrySetVisualState(_statusPanelLabel, frameVisible: _overlayVisible))
             {
                 if (!string.IsNullOrWhiteSpace(_overlay.LastError))
                 {
@@ -193,8 +211,6 @@ internal sealed class DesktopActivityCoordinator : IDisposable
         {
             cleanupErrors.Add($"OVERLAY_HIDE_FAILED: {_overlay.LastError}");
         }
-        _overlayVisible = false;
-
         var restorationAttempted = false;
         var restored = false;
         string? restorationError = null;
@@ -255,7 +271,7 @@ internal sealed class DesktopActivityCoordinator : IDisposable
             Depth = 0,
             InteractionId = interactionId,
             OverlayRequested = overlayRequested,
-            OverlayVisible = false,
+            OverlayVisible = _overlayVisible,
             OverlayWasVisible = overlayWasVisible,
             Status = _status,
             StatusPanelVisible = _statusPanelVisible,
@@ -307,6 +323,9 @@ internal sealed class DesktopActivityCoordinator : IDisposable
                 Status = _status,
                 StatusPanelVisible = _statusPanelVisible,
                 StatusPanelLabel = _statusPanelLabel,
+                OverlayVisible = _overlayVisible,
+                ActionTraceVisible = _actionTraceVisible,
+                CurrentAction = _currentAction,
                 LastCompletion = completion
             };
         }
@@ -340,6 +359,14 @@ internal sealed class DesktopActivityCoordinator : IDisposable
             _ => "AGENT 等待下一步"
         };
 
+        var terminal = _status is "paused" or "cancelled" or "failed";
+        if (terminal)
+        {
+            CancelFrameIdleTimer();
+            _overlayVisible = false;
+            ClearPendingActionTrace();
+        }
+
         if (_statusPanelVisible)
         {
             if (!_overlay.TrySetVisualState(_statusPanelLabel, frameVisible: _overlayVisible))
@@ -365,6 +392,7 @@ internal sealed class DesktopActivityCoordinator : IDisposable
         finally
         {
             _disposed = true;
+            CancelFrameIdleTimer();
             _overlay.Dispose();
             _statusPanelVisible = false;
             _overlayVisible = false;
@@ -426,7 +454,6 @@ internal sealed class DesktopActivityCoordinator : IDisposable
         _label = "AGENT 操作中";
         _interactionId = null;
         _overlayRequested = false;
-        _overlayVisible = false;
         _actionTraceRequested = false;
         _actionTraceVisible = false;
         _currentAction = null;
@@ -507,7 +534,7 @@ internal sealed class DesktopActivityCoordinator : IDisposable
 
     internal long BeginActionTrace(string? action, Point? screenPoint, int delayMs = 300)
     {
-        if (_disposed || _depth == 0 || !_actionTraceRequested || !_overlayVisible)
+        if (_disposed || _depth == 0 || !_overlayRequested || !_statusPanelVisible)
         {
             return 0;
         }
@@ -519,20 +546,34 @@ internal sealed class DesktopActivityCoordinator : IDisposable
             _traceDelayTimer?.Dispose();
             var generation = ++_traceGeneration;
             _currentAction = normalized;
+            _status = RunningStatus;
+            _statusPanelLabel = NormalizeLabel(normalized);
             _pendingActionPoint = screenPoint;
             _actionTraceVisible = false;
-            _traceDelayTimer = new System.Threading.Timer(_ =>
+            if (!_overlay.TrySetVisualState(_statusPanelLabel, frameVisible: true))
             {
-                lock (_traceGate)
+                _statusPanelVisible = false;
+                _overlayVisible = false;
+                return generation;
+            }
+
+            _overlayVisible = true;
+            RestartFrameIdleTimerLocked();
+            if (_actionTraceRequested)
+            {
+                _traceDelayTimer = new System.Threading.Timer(_ =>
                 {
-                    if (_disposed || generation != _traceGeneration || _depth == 0 ||
-                        !_actionTraceRequested || !_overlayVisible)
+                    lock (_traceGate)
                     {
-                        return;
+                        if (_disposed || generation != _traceGeneration || _depth == 0 ||
+                            !_actionTraceRequested || !_overlayVisible)
+                        {
+                            return;
+                        }
+                        _actionTraceVisible = _overlay.TrySetActionTrace(_pendingActionPoint, normalized);
                     }
-                    _actionTraceVisible = _overlay.TrySetActionTrace(_pendingActionPoint, normalized);
-                }
-            }, null, Math.Clamp(delayMs, 0, 5000), Timeout.Infinite);
+                }, null, Math.Clamp(delayMs, 0, 5000), Timeout.Infinite);
+            }
             return generation;
         }
     }
@@ -568,13 +609,59 @@ internal sealed class DesktopActivityCoordinator : IDisposable
             _traceDelayTimer?.Dispose();
             _traceDelayTimer = null;
             _traceGeneration++;
-            if (_actionTraceVisible && _overlayVisible)
+            if (_actionTraceVisible && _statusPanelVisible)
             {
                 _ = _overlay.TrySetActionTrace(null, string.Empty);
             }
             _actionTraceVisible = false;
             _pendingActionPoint = null;
-            _currentAction = null;
+        }
+    }
+
+    private void RestartFrameIdleTimer()
+    {
+        lock (_traceGate)
+        {
+            RestartFrameIdleTimerLocked();
+        }
+    }
+
+    private void RestartFrameIdleTimerLocked()
+    {
+        _frameIdleTimer?.Dispose();
+        var generation = ++_frameGeneration;
+        _frameIdleTimer = new System.Threading.Timer(_ =>
+        {
+            lock (_traceGate)
+            {
+                if (_disposed || generation != _frameGeneration)
+                {
+                    return;
+                }
+
+                _frameIdleTimer?.Dispose();
+                _frameIdleTimer = null;
+                _overlayVisible = false;
+                if (_actionTraceVisible)
+                {
+                    _ = _overlay.TrySetActionTrace(null, string.Empty);
+                }
+                _actionTraceVisible = false;
+                if (_statusPanelVisible && !_overlay.TrySetVisualState(_statusPanelLabel, frameVisible: false))
+                {
+                    _statusPanelVisible = false;
+                }
+            }
+        }, null, FrameIdleDelayMs, Timeout.Infinite);
+    }
+
+    private void CancelFrameIdleTimer()
+    {
+        lock (_traceGate)
+        {
+            _frameIdleTimer?.Dispose();
+            _frameIdleTimer = null;
+            _frameGeneration++;
         }
     }
 
@@ -585,7 +672,7 @@ internal sealed class DesktopActivityCoordinator : IDisposable
             _traceDelayTimer?.Dispose();
             _traceDelayTimer = null;
             _traceGeneration++;
-            if (_actionTraceVisible && _overlayVisible)
+            if (_actionTraceVisible && _statusPanelVisible)
             {
                 _ = _overlay.TrySetActionTrace(null, string.Empty);
             }
