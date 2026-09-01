@@ -16,6 +16,8 @@ from run_group_wave import (  # noqa: E402
     accumulated_context,
     bind_selected_source,
     checkpoint_observation,
+    consecutive_verified_assistant_sends,
+    enforce_participation_guard,
     find_new_outgoing,
     find_unique_text,
     initial_participation_verified,
@@ -24,6 +26,7 @@ from run_group_wave import (  # noqa: E402
     is_verified_outgoing,
     message_payload,
     quote_preview_matches,
+    refresh_participation_guard,
     reply_anchor_point,
     reply_fragment_strength,
     select_requested_source,
@@ -362,6 +365,161 @@ class RunGroupWaveTests(unittest.TestCase):
             self.assertEqual("overlap", status)
             self.assertEqual(["outgoing"], [item["message_fingerprint"] for item in delta])
             self.assertEqual(2, len(accumulated_context(updated)))
+
+    def test_participation_guard_is_disabled_without_configuration(self):
+        state = {
+            "observed_message_fingerprints": [],
+            "observed_messages": {},
+        }
+        guard = refresh_participation_guard(
+            state,
+            {"x": 300, "y": 75, "width": 600, "height": 480},
+        )
+        self.assertEqual(0, guard["max_consecutive_sends"])
+        self.assertTrue(guard["send_allowed"])
+
+    def test_verified_assistant_send_counts_even_when_direction_is_incoming(self):
+        sent = message("sent", "助手回复", direction="incoming")
+        state = {
+            "observed_message_fingerprints": ["sent"],
+            "observed_messages": {"sent": sent},
+            "send_ledger": {
+                "send-1": {
+                    "status": "sent_verified",
+                    "exact_text": "助手回复",
+                    "verification_evidence": {"message_fingerprint": "sent"},
+                }
+            },
+        }
+        self.assertEqual(
+            1,
+            consecutive_verified_assistant_sends(
+                state,
+                {"x": 300, "y": 75, "width": 600, "height": 480},
+            ),
+        )
+
+    def test_fifth_consecutive_assistant_send_blocks_the_sixth(self):
+        records = [message(f"sent-{index}", f"助手回复{index}", direction="outgoing") for index in range(5)]
+        state = {
+            "observed_message_fingerprints": [item["message_fingerprint"] for item in records],
+            "observed_messages": {item["message_fingerprint"]: item for item in records},
+            "send_ledger": {
+                f"send-{index}": {
+                    "status": "sent_verified",
+                    "exact_text": item["content"],
+                    "verification_evidence": {"message_fingerprint": item["message_fingerprint"]},
+                }
+                for index, item in enumerate(records)
+            },
+        }
+        guard = refresh_participation_guard(
+            state,
+            {"x": 300, "y": 75, "width": 600, "height": 480},
+            configured_limit=5,
+        )
+        self.assertEqual(5, guard["consecutive_assistant_sends"])
+        self.assertFalse(guard["send_allowed"])
+        with self.assertRaisesRegex(WeChatWaveError, "Another proven group-member message"):
+            enforce_participation_guard(guard)
+
+    def test_group_member_message_resets_consecutive_assistant_streak(self):
+        records = [
+            message("sent-1", "助手回复1", direction="outgoing"),
+            message("sent-2", "助手回复2", direction="outgoing"),
+            message("incoming", "群友接话", direction="incoming"),
+            message("sent-3", "助手回复3", direction="outgoing"),
+        ]
+        state = {
+            "observed_message_fingerprints": [item["message_fingerprint"] for item in records],
+            "observed_messages": {item["message_fingerprint"]: item for item in records},
+            "send_ledger": {
+                f"send-{index}": {
+                    "status": "sent_verified",
+                    "exact_text": item["content"],
+                    "verification_evidence": {"message_fingerprint": item["message_fingerprint"]},
+                }
+                for index, item in enumerate((records[0], records[1], records[3]), start=1)
+            },
+        }
+        guard = refresh_participation_guard(
+            state,
+            {"x": 300, "y": 75, "width": 600, "height": 480},
+            configured_limit=5,
+        )
+        self.assertEqual(1, guard["consecutive_assistant_sends"])
+        self.assertTrue(guard["send_allowed"])
+
+    def test_unverified_manual_outgoing_does_not_reset_assistant_streak(self):
+        records = [
+            message("sent-1", "助手回复1", direction="outgoing"),
+            message("manual", "本人手工发言", direction="outgoing"),
+            message("sent-2", "助手回复2", direction="outgoing"),
+        ]
+        state = {
+            "observed_message_fingerprints": [item["message_fingerprint"] for item in records],
+            "observed_messages": {item["message_fingerprint"]: item for item in records},
+            "send_ledger": {
+                "send-1": {
+                    "status": "sent_verified",
+                    "exact_text": records[0]["content"],
+                    "verification_evidence": {"message_fingerprint": "sent-1"},
+                },
+                "send-2": {
+                    "status": "sent_verified",
+                    "exact_text": records[2]["content"],
+                    "verification_evidence": {"message_fingerprint": "sent-2"},
+                },
+            },
+        }
+        self.assertEqual(
+            2,
+            consecutive_verified_assistant_sends(
+                state,
+                {"x": 300, "y": 75, "width": 600, "height": 480},
+            ),
+        )
+
+    def test_shifted_ocr_duplicate_counts_one_verified_send(self):
+        first = message("sent-original", "这是助手发出的完整回复", direction="outgoing")
+        shifted = message("sent-shifted", "这是助手发出的完整回复", direction="incoming")
+        shifted["bounds"] = {"x": 700, "y": 120, "width": 160, "height": 20}
+        state = {
+            "observed_message_fingerprints": ["sent-original", "sent-shifted"],
+            "observed_messages": {"sent-original": first, "sent-shifted": shifted},
+            "send_ledger": {
+                "send-1": {
+                    "status": "sent_verified",
+                    "exact_text": "这是助手发出的完整回复",
+                    "verification_evidence": {"message_fingerprint": "sent-original"},
+                }
+            },
+        }
+        self.assertEqual(
+            1,
+            consecutive_verified_assistant_sends(
+                state,
+                {"x": 300, "y": 75, "width": 600, "height": 480},
+            ),
+        )
+
+    def test_checkpoint_persists_group_specific_guard_configuration(self):
+        with tempfile.TemporaryDirectory() as directory:
+            args = argparse.Namespace(
+                state_path=str(Path(directory) / "conversation-state.json"),
+                process="Weixin",
+                group_title="测试群",
+                identity_region={"x": 300, "y": 0, "width": 600, "height": 90},
+                content_region={"x": 300, "y": 75, "width": 600, "height": 480},
+                conversation_key=None,
+                max_consecutive_sends=5,
+            )
+            _, state, _, _ = checkpoint_observation(args, [message("incoming", "群友发言")])
+            self.assertEqual(5, state["wechat_group_wave"]["participation_guard"]["max_consecutive_sends"])
+
+            del args.max_consecutive_sends
+            _, resumed, _, _ = checkpoint_observation(args, [message("incoming-shifted", "群友发言")])
+            self.assertEqual(5, resumed["wechat_group_wave"]["participation_guard"]["max_consecutive_sends"])
 
     def test_new_message_payload_preserves_ocr_evidence(self):
         item = message("m1", "识别文字")

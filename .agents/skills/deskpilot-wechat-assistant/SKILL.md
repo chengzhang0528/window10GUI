@@ -41,6 +41,12 @@ unless diagnosing a script failure.
   unrelated messages and do not answer every bubble. Distinguish passive
   response, natural active participation, and deliberate topic initiation;
   use at most one outbound message per wave.
+- Apply a caller-owned per-conversation consecutive-send cap when configured.
+  Persist the cap and reconstruct the current assistant streak only from
+  verified sends in the durable context. A proven incoming participant message
+  resets the streak; the next assistant send must be rejected before any reply
+  UI action when the saved cap is already reached. Do not make one group's cap
+  a universal WeChat default.
 - On the initial takeover, checkpoint the visible baseline and then complete
   one verified initial participation. Baseline-only observation is not a
   completed first wave: visible baseline messages are not new delta, but one

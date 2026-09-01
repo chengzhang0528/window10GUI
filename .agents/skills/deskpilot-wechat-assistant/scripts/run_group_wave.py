@@ -257,11 +257,18 @@ def checkpoint_observation(
         # remain resumable and their send ledger keeps protecting idempotency.
         snapshot["conversation_key"] = existing["conversation_key"]
     state = update_snapshot(existing, snapshot) if existing is not None else create_conversation_state(snapshot)
-    state["wechat_group_wave"] = {
+    adapter_state = dict(state.get("wechat_group_wave") or {})
+    adapter_state.update({
         "last_visible_messages": copy.deepcopy(messages),
         "last_delta_status": delta_status,
         "last_observed_at": utc_now(),
-    }
+    })
+    state["wechat_group_wave"] = adapter_state
+    refresh_participation_guard(
+        state,
+        args.content_region,
+        configured_limit=getattr(args, "max_consecutive_sends", None),
+    )
     store.save(state, reason="wechat_group_wave_observed")
     return store, state, new_records, delta_status
 
@@ -624,16 +631,86 @@ def is_verified_outgoing(
     state: dict[str, Any],
     content_region: dict[str, int],
 ) -> bool:
-    for attempt in (state.get("send_ledger") or {}).values():
+    return bool(verified_outgoing_attempt_keys(message, state, content_region))
+
+
+def verified_outgoing_attempt_keys(
+    message: dict[str, Any],
+    state: dict[str, Any],
+    content_region: dict[str, int],
+) -> set[str]:
+    fingerprint_matches: set[str] = set()
+    text_matches: set[str] = set()
+    for key, attempt in (state.get("send_ledger") or {}).items():
         if attempt.get("status") != "sent_verified":
             continue
         evidence_fingerprint = str((attempt.get("verification_evidence") or {}).get("message_fingerprint") or "")
         if evidence_fingerprint and evidence_fingerprint == message.get("message_fingerprint"):
-            return True
+            fingerprint_matches.add(str(key))
+            continue
         exact_text = str(attempt.get("exact_text") or "")
         if exact_text and find_new_outgoing([message], exact_text, set(), content_region) is not None:
-            return True
-    return False
+            text_matches.add(str(key))
+    return fingerprint_matches or text_matches
+
+
+def consecutive_verified_assistant_sends(
+    state: dict[str, Any],
+    content_region: dict[str, int],
+) -> int:
+    attempts: set[str] = set()
+    for message in reversed(accumulated_context(state)):
+        matched_attempts = verified_outgoing_attempt_keys(message, state, content_region)
+        if matched_attempts:
+            attempts.update(matched_attempts)
+            continue
+        if is_conversation_message(message, incoming_only=True):
+            break
+    return len(attempts)
+
+
+def refresh_participation_guard(
+    state: dict[str, Any],
+    content_region: dict[str, int],
+    *,
+    configured_limit: int | None = None,
+) -> dict[str, Any]:
+    adapter_state = dict(state.get("wechat_group_wave") or {})
+    existing = dict(adapter_state.get("participation_guard") or {})
+    if configured_limit is None:
+        limit = int(existing.get("max_consecutive_sends") or 0)
+    else:
+        limit = int(configured_limit)
+        if limit < 0:
+            raise WeChatWaveError(
+                "WECHAT_CONSECUTIVE_SEND_LIMIT_INVALID",
+                "The consecutive-send limit must be zero or greater.",
+                {"max_consecutive_sends": limit},
+            )
+    consecutive = consecutive_verified_assistant_sends(state, content_region)
+    guard = {
+        "max_consecutive_sends": limit,
+        "consecutive_assistant_sends": consecutive,
+        "send_allowed": limit <= 0 or consecutive < limit,
+        "updated_at": utc_now(),
+    }
+    adapter_state["participation_guard"] = guard
+    state["wechat_group_wave"] = adapter_state
+    return guard
+
+
+def enforce_participation_guard(guard: dict[str, Any]) -> None:
+    limit = int(guard.get("max_consecutive_sends") or 0)
+    consecutive = int(guard.get("consecutive_assistant_sends") or 0)
+    if limit > 0 and consecutive >= limit:
+        raise WeChatWaveError(
+            "WECHAT_CONSECUTIVE_SEND_LIMIT",
+            "Another proven group-member message is required before the assistant may send again.",
+            {
+                "max_consecutive_sends": limit,
+                "consecutive_assistant_sends": consecutive,
+            },
+        )
 
 
 def append_experience(
@@ -662,6 +739,9 @@ def append_experience(
         "voice_count": int(metrics.get("voice_count", 0)),
         "low_confidence_incoming_count": int(metrics.get("low_confidence_incoming_count", 0)),
         "delta_status": metrics.get("delta_status"),
+        "max_consecutive_sends": int(metrics.get("max_consecutive_sends", 0)),
+        "consecutive_assistant_sends": int(metrics.get("consecutive_assistant_sends", 0)),
+        "participation_guard_blocked": bool(metrics.get("participation_guard_blocked", False)),
         "reply_anchor_verified": bool(metrics.get("reply_anchor_verified", False)),
         "source_fingerprint_rebound": bool(metrics.get("source_fingerprint_rebound", False)),
         "send_attempted": bool(metrics.get("send_attempted", False)),
@@ -709,6 +789,9 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         conversation_messages = [item for item in context if is_conversation_message(item)]
         context_tail_limit = max(1, min(100, int(args.context_tail_limit)))
         context_tail = conversation_messages[-context_tail_limit:]
+        participation_guard = dict(
+            ((state.get("wechat_group_wave") or {}).get("participation_guard") or {})
+        )
         metrics.update(
             {
                 "new_record_count": len(new_records),
@@ -718,6 +801,8 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
                     1 for item in new_messages if item.get("confidence_level") == "low"
                 ),
                 "delta_status": delta_status,
+                "max_consecutive_sends": participation_guard["max_consecutive_sends"],
+                "consecutive_assistant_sends": participation_guard["consecutive_assistant_sends"],
             }
         )
 
@@ -739,6 +824,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
                 "conversation_context_tail_count": len(context_tail),
                 "conversation_context_complete_in_state": True,
                 "initial_participation_verified": initial_participation_verified(state),
+                "participation_guard": participation_guard,
                 "messages": [message_payload(item, include_source_evidence=True) for item in messages],
                 "state_path": str(Path(args.state_path).resolve()),
                 "duration_ms": int((time.monotonic() - started) * 1000),
@@ -780,6 +866,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
                 "verified_at": utc_now(),
             }
             state["scenario_progress"] = progress
+            participation_guard = refresh_participation_guard(state, args.content_region)
             store.save(state, reason=f"wechat_{args.participation_kind}_reconciled_sent_verified")
             status = "sent_verified"
             sent = True
@@ -791,6 +878,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
                 "send_verified": True,
                 "idempotency_key": attempt["idempotency_key"],
                 "outgoing_message_fingerprint": outgoing["message_fingerprint"],
+                "participation_guard": participation_guard,
                 "state_path": str(Path(args.state_path).resolve()),
                 "duration_ms": int((time.monotonic() - started) * 1000),
             }
@@ -801,6 +889,11 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
             raise WeChatWaveError("DISCLOSURE_REQUIRED", "The exact reply must start with the configured disclosure.")
         if args.participation_kind == "initial_participation" and initial_participation_verified(state):
             raise WeChatWaveError("INITIAL_PARTICIPATION_ALREADY_VERIFIED", "The initial participation was already sent and verified.")
+        try:
+            enforce_participation_guard(participation_guard)
+        except WeChatWaveError:
+            metrics["participation_guard_blocked"] = True
+            raise
 
         source, source_fingerprint_rebound = select_requested_source(
             messages,
@@ -1006,6 +1099,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
             "verified_at": utc_now(),
         }
         state["scenario_progress"] = progress
+        participation_guard = refresh_participation_guard(state, args.content_region)
         store.save(state, reason=f"wechat_{args.participation_kind}_sent_verified")
         status = "sent_verified"
         sent = True
@@ -1018,6 +1112,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
             "send_verified": True,
             "idempotency_key": attempt["idempotency_key"],
             "outgoing_message_fingerprint": outgoing["message_fingerprint"],
+            "participation_guard": participation_guard,
             "state_path": str(Path(args.state_path).resolve()),
             "duration_ms": int((time.monotonic() - started) * 1000),
         }
@@ -1074,6 +1169,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--send-verify-timeout-ms", type=int, default=2500)
     parser.add_argument("--poll-ms", type=int, default=75)
     parser.add_argument("--context-tail-limit", type=int, default=12)
+    parser.add_argument(
+        "--max-consecutive-sends",
+        type=int,
+        default=None,
+        help="Persist a per-conversation assistant send cap; zero disables it and omission preserves the saved value.",
+    )
     parser.add_argument("--show-action-trace", action="store_true")
     parser.add_argument("--state-path", required=True)
     parser.add_argument("--experience-path")

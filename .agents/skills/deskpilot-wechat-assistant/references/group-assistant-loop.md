@@ -10,6 +10,8 @@ AI assistant.
 - Caller-owned durable state path outside Git.
 - Required disclosure text for every outbound message.
 - Poll cadence and participation limits authorized by the caller.
+- Optional per-conversation consecutive assistant-send cap. Zero disables it;
+  when configured, persist it with the conversation checkpoint.
 - A stable WeChat window selector and calibrated, window-relative identity,
   content, search-result, and composer regions. Machine-specific coordinates
   belong in local state, not in this skill.
@@ -42,6 +44,8 @@ AI assistant.
 5. Send nothing when messages are unrelated, context is incomplete, the latest
    speaker may still be composing a multi-message thought, a voice transcript
    is unavailable/uncertain, or the specific reply anchor is unproven.
+   Also send nothing when the persisted consecutive-send cap has been reached;
+   this gate runs before opening a message menu or touching the composer.
 6. When participating, choose one exact source message, establish WeChat's
    visible quote/reply preview, compose one concise contribution with the exact
    disclosure, send once under one idempotency key, and verify the new outgoing
@@ -70,6 +74,10 @@ AI assistant.
   autonomously.
 - Group replies always bind to one specific source message even when the final
   text also invites the rest of the group to participate.
+- A verified assistant send increases the current consecutive-send streak. A
+  proven incoming participant message resets it. Timestamps, system records,
+  direction guesses, and unverified/manual outgoing bubbles do not reset or
+  increase this assistant-specific streak.
 
 ## De-identified experience record
 
