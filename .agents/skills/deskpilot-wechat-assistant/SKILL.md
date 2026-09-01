@@ -12,6 +12,11 @@ cross-application behavior there and keep only WeChat UI semantics here.
 
 For recurring group participation or product takeover evaluation, read
 [references/group-assistant-loop.md](references/group-assistant-loop.md).
+Use [scripts/run_group_wave.py](scripts/run_group_wave.py) for the repeatable
+mechanical path: one bounded process invocation performs exact-group recovery,
+observation, optional specific-message quote, send, verification, persistence,
+and cleanup. Do not replace that path with a sequence of manual CLI round trips
+unless diagnosing a script failure.
 
 ## WeChat adapter rules
 
@@ -31,6 +36,13 @@ For recurring group participation or product takeover evaluation, read
   unrelated messages and do not answer every bubble. Distinguish passive
   response, natural active participation, and deliberate topic initiation;
   use at most one outbound message per wave.
+- On the initial takeover, checkpoint the visible baseline and then complete
+  one verified initial participation. Baseline-only observation is not a
+  completed first wave: visible baseline messages are not new delta, but one
+  safe message may still be the specific reply anchor and context for either
+  continuing the topic or opening a lightweight new one. Persist completion
+  separately so a later wave can recover a missed initial participation
+  without sending it twice.
 - Apply any caller-provided disclosure text to every outbound message exactly
   as requested. The disclosure is part of the approved payload and must be
   present in post-send verification.
