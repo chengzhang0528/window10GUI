@@ -31,7 +31,12 @@ unless diagnosing a script failure.
 - Treat WeChat groups as `specific_message`: every reply must use a visibly
   proven quote/reply anchor for one exact source message. A sender name or an
   open conversation alone does not prove the reply target. If the quote preview
-  cannot be verified, stop with no send.
+  cannot be verified, stop with no send. Do not reject the newest message only
+  because it is near the bottom of the visible history; right-click its strongest
+  body line, resolve the independent WeChat `CMenuWnd` through UIA, invoke one
+  unique localized quote `MenuItem`, and let the quote preview prove whether the
+  anchor is usable. Use positioned OCR only as a fallback when the quote label
+  is visibly unique inside the captured menu.
 - Preserve a relevant multi-message context window before deciding. Ignore
   unrelated messages and do not answer every bubble. Distinguish passive
   response, natural active participation, and deliberate topic initiation;
@@ -53,7 +58,13 @@ unless diagnosing a script failure.
 - Immediately checkpoint the complete structured conversation context and the
   last verified cursor at the caller-owned state path. Do not persist
   screenshots, clipboard contents, process logs, or raw chat text in this skill
-  or Git.
+  or Git. Each trusted wave must append only sequence-proven delta records to
+  the accumulated context, retain the previous visible sequence for the next
+  overlap check, and expose both the concrete new messages and the growing
+  de-duplicated conversation count plus a bounded recent context tail to the
+  caller. The complete accumulated context stays in the caller-owned state file
+  so routine polling remains token-efficient. A continuity gap is not permission
+  to add the whole viewport again.
 - Before input, recheck conversation identity, fresh quote anchor, idempotency
   key, disclosure, and composer state. After input, verify one new outgoing
   message in the same conversation. On uncertain outcome, observe only; never

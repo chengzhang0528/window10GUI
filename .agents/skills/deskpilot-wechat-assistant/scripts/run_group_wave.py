@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import copy
 import difflib
 import hashlib
 import json
@@ -30,7 +31,7 @@ from conversation_state import (  # noqa: E402
     update_snapshot,
 )
 from conversation_state_store import ConversationStateStore  # noqa: E402
-from message_structure import finalize_timeline, group_page_candidates, normalize_text  # noqa: E402
+from message_structure import finalize_timeline, group_page_candidates, messages_match, normalize_text  # noqa: E402
 
 
 class WeChatWaveError(RuntimeError):
@@ -220,12 +221,26 @@ def snapshot_for(args: argparse.Namespace, messages: list[dict[str, Any]]) -> di
 def checkpoint_observation(
     args: argparse.Namespace,
     messages: list[dict[str, Any]],
-) -> tuple[ConversationStateStore, dict[str, Any], list[dict[str, Any]]]:
+) -> tuple[ConversationStateStore, dict[str, Any], list[dict[str, Any]], str]:
     store = ConversationStateStore(args.state_path)
     existing = store.load()
-    new_messages = visible_new_messages(messages, existing)
-    snapshot = snapshot_for(args, messages)
-    if existing is not None:
+    if existing is None:
+        new_records: list[dict[str, Any]] = []
+        delta_status = "initial_baseline"
+        snapshot = snapshot_for(args, messages)
+    else:
+        adapter_state = existing.get("wechat_group_wave") or {}
+        previous_visible = adapter_state.get("last_visible_messages") or []
+        if previous_visible:
+            new_records, delta_status = visible_sequence_delta(messages, previous_visible)
+        else:
+            # One-time compatibility path for checkpoints created before the
+            # adapter persisted its previous visible sequence.
+            new_records = visible_new_messages(messages, existing)
+            delta_status = "legacy_bootstrap"
+        # The durable state already owns older context. Append only the proven
+        # delta so OCR drift in an unchanged visible page cannot inflate it.
+        snapshot = snapshot_for(args, new_records)
         binding = existing.get("conversation_binding") or {}
         stored_target = binding.get("target") or {}
         stored_identities = [normalize_text(str(value)) for value in binding.get("expected_identity") or []]
@@ -242,8 +257,13 @@ def checkpoint_observation(
         # remain resumable and their send ledger keeps protecting idempotency.
         snapshot["conversation_key"] = existing["conversation_key"]
     state = update_snapshot(existing, snapshot) if existing is not None else create_conversation_state(snapshot)
+    state["wechat_group_wave"] = {
+        "last_visible_messages": copy.deepcopy(messages),
+        "last_delta_status": delta_status,
+        "last_observed_at": utc_now(),
+    }
     store.save(state, reason="wechat_group_wave_observed")
-    return store, state, new_messages
+    return store, state, new_records, delta_status
 
 
 def initial_participation_verified(state: dict[str, Any]) -> bool:
@@ -279,6 +299,62 @@ def visible_new_messages(messages: list[dict[str, Any]], existing: dict[str, Any
     return result
 
 
+def visible_sequence_delta(
+    messages: list[dict[str, Any]],
+    previous_visible: list[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], str]:
+    """Return records after the largest proven previous-tail/current-head overlap."""
+    maximum = min(len(messages), len(previous_visible))
+    for size in range(maximum, 0, -1):
+        previous_tail = previous_visible[-size:]
+        current_head = messages[:size]
+        if all(
+            left.get("content_kind") == right.get("content_kind") and messages_match(left, right)
+            for left, right in zip(previous_tail, current_head)
+        ):
+            return list(messages[size:]), "overlap"
+    # A changed page without sequence continuity is a gap, not permission to
+    # re-add the whole viewport as new conversation history.
+    return [], "gap"
+
+
+def is_conversation_message(message: dict[str, Any], *, incoming_only: bool = False) -> bool:
+    direction = str(message.get("direction") or "unknown")
+    if incoming_only and direction != "incoming":
+        return False
+    if not incoming_only and direction not in {"incoming", "outgoing"}:
+        return False
+    return str(message.get("content_kind") or "unknown") not in {"system", "timestamp", "unknown"}
+
+
+def accumulated_context(state: dict[str, Any]) -> list[dict[str, Any]]:
+    observed = state.get("observed_messages") or {}
+    return [
+        observed[fingerprint]
+        for fingerprint in state.get("observed_message_fingerprints") or []
+        if fingerprint in observed
+    ]
+
+
+def message_payload(message: dict[str, Any], *, include_source_evidence: bool = False) -> dict[str, Any]:
+    payload = {
+        "message_fingerprint": message.get("message_fingerprint"),
+        "sender": message.get("sender"),
+        "direction": message.get("direction"),
+        "content_kind": message.get("content_kind"),
+        "content": message.get("content"),
+        "timestamp": message.get("timestamp"),
+        "confidence": message.get("confidence"),
+        "confidence_level": message.get("confidence_level"),
+        "confidence_reasons": message.get("confidence_reasons"),
+        "content_metadata": message.get("content_metadata"),
+        "bounds": message.get("bounds"),
+    }
+    if include_source_evidence:
+        payload["source_candidates"] = message.get("source_candidates") or []
+    return payload
+
+
 def select_source(
     messages: list[dict[str, Any]],
     *,
@@ -291,8 +367,6 @@ def select_source(
     explicit_source = bool(wanted or source_fingerprint)
     for message in messages:
         if message.get("direction") != "incoming" or message.get("content_kind") != "text":
-            continue
-        if int((message.get("bounds") or {}).get("y", 0)) > maximum_anchor_y:
             continue
         if source_fingerprint and message.get("message_fingerprint") != source_fingerprint:
             continue
@@ -313,6 +387,182 @@ def select_source(
             raise WeChatWaveError("WECHAT_REPLY_SOURCE_NOT_UNIQUE", "The requested source message was ambiguous.")
         return matches[0]
     return matches[-1]
+
+
+def select_requested_source(
+    messages: list[dict[str, Any]],
+    *,
+    source_text: str | None,
+    source_fingerprint: str | None,
+    maximum_anchor_y: int,
+) -> tuple[dict[str, Any], bool]:
+    try:
+        return (
+            select_source(
+                messages,
+                source_text=source_text,
+                source_fingerprint=source_fingerprint,
+                maximum_anchor_y=maximum_anchor_y,
+            ),
+            False,
+        )
+    except WeChatWaveError as exc:
+        if exc.code != "WECHAT_REPLY_SOURCE_NOT_VISIBLE" or not source_text or not source_fingerprint:
+            raise
+    rebound = select_source(
+        messages,
+        source_text=source_text,
+        source_fingerprint=None,
+        maximum_anchor_y=maximum_anchor_y,
+    )
+    rebound = copy.deepcopy(rebound)
+    rebound["message_fingerprint"] = source_fingerprint
+    return rebound, True
+
+
+def bind_selected_source(messages: list[dict[str, Any]], source: dict[str, Any]) -> list[dict[str, Any]]:
+    normalized_source = normalize_text(str(source.get("content") or ""))
+    indexes = [
+        index
+        for index, item in enumerate(messages)
+        if item.get("direction") == "incoming"
+        and normalize_text(str(item.get("content") or "")) == normalized_source
+    ]
+    if len(indexes) != 1:
+        raise WeChatWaveError(
+            "WECHAT_REPLY_SOURCE_NOT_UNIQUE",
+            "The selected source did not map to one current visible message.",
+        )
+    rebound = list(messages)
+    rebound[indexes[0]] = source
+    return rebound
+
+
+def reply_anchor_point(message: dict[str, Any]) -> tuple[int, int]:
+    candidates = [
+        candidate
+        for candidate in message.get("source_candidates") or []
+        if normalize_text(str(candidate.get("text") or ""))
+    ]
+    if not candidates:
+        return center(message)
+    # Sender labels and tiny avatar OCR can be part of the grouped record.
+    # Right-click the strongest body line instead of the union rectangle.
+    strongest = max(
+        candidates,
+        key=lambda candidate: (
+            len(normalize_text(str(candidate.get("text") or ""))),
+            int((candidate.get("bounds") or {}).get("width", 0))
+            * int((candidate.get("bounds") or {}).get("height", 0)),
+        ),
+    )
+    return center(strongest)
+
+
+def invoke_quote_action_uia(host: DeskPilotHost, args: argparse.Namespace) -> dict[str, Any]:
+    popup = host.request(
+        "windows.find",
+        {"process": args.process, "class_name": args.menu_class_name, "action_label": "定位微信消息菜单"},
+    )
+    popup_windows = popup.get("windows") or []
+    if len(popup_windows) != 1:
+        raise WeChatWaveError(
+            "WECHAT_QUOTE_MENU_NOT_UNIQUE",
+            f"Expected one visible WeChat message menu, found {len(popup_windows)}.",
+            {"match_count": len(popup_windows)},
+        )
+    menu_item = host.request(
+        "ui.find",
+        {
+            "window_id": str(popup_windows[0].get("window_id") or ""),
+            "name": args.quote_label,
+            "control_type": "MenuItem",
+            "visible": True,
+            "action_label": "确认唯一引用菜单项",
+        },
+    )
+    elements = menu_item.get("elements") or []
+    if len(elements) != 1:
+        raise WeChatWaveError(
+            "WECHAT_QUOTE_ACTION_NOT_UNIQUE",
+            f"Expected one accessible {args.quote_label!r} menu item, found {len(elements)}.",
+            {"match_count": len(elements), "mode": "uia_menu_item"},
+        )
+    host.request(
+        "ui.invoke",
+        {
+            "element_id": str(elements[0].get("element_id") or ""),
+            "action_label": "引用具体消息",
+        },
+    )
+    return {"mode": "uia_menu_item", "menu_class_name": args.menu_class_name}
+
+
+def reposition_reply_source(
+    host: DeskPilotHost,
+    args: argparse.Namespace,
+    page: dict[str, Any],
+    messages: list[dict[str, Any]],
+    source: dict[str, Any],
+) -> tuple[dict[str, Any], list[dict[str, Any]], dict[str, Any], bool]:
+    if int((source.get("bounds") or {}).get("y", 0)) <= args.maximum_anchor_y:
+        return page, messages, source, False
+    original_fingerprint = str(source.get("message_fingerprint") or "")
+    original_text = str(source.get("content") or "")
+    initial_y = int((source.get("bounds") or {}).get("y", 0))
+    current_page = page
+    current_messages = messages
+    current_source = source
+    gutter_point = (
+        args.content_region["x"] + args.content_region["width"] - 20,
+        args.content_region["y"] + args.content_region["height"] // 2,
+    )
+    for attempt in range(2):
+        scroll_x, scroll_y = gutter_point if attempt == 0 else reply_anchor_point(current_source)
+        host.request(
+            "input.scroll",
+            {
+                "window_id": str((current_page.get("window") or {}).get("window_id") or ""),
+                "screenshot_id": str((current_page.get("screenshot") or {}).get("screenshot_id") or ""),
+                "x": scroll_x,
+                "y": scroll_y,
+                "amount": -abs(args.anchor_scroll_amount),
+                "action_label": "将回复目标移入引用安全区",
+            },
+        )
+        observed_page = observe_group(host, args)
+        observed_messages = structured_messages(observed_page, args.content_region)
+        try:
+            relocated = select_source(
+                observed_messages,
+                source_text=original_text,
+                source_fingerprint=original_fingerprint,
+                maximum_anchor_y=args.maximum_anchor_y,
+            )
+        except WeChatWaveError as exc:
+            if exc.code != "WECHAT_REPLY_SOURCE_NOT_VISIBLE":
+                raise
+            relocated = select_source(
+                observed_messages,
+                source_text=original_text,
+                source_fingerprint=None,
+                maximum_anchor_y=args.maximum_anchor_y,
+            )
+        current_page = observed_page
+        current_messages = observed_messages
+        current_source = relocated
+        if int((relocated.get("bounds") or {}).get("y", 0)) <= args.maximum_anchor_y:
+            break
+    # Scrolling may change the preceding visible anchor used by the generic
+    # fingerprint. Preserve the already-proven logical source identity while
+    # replacing only its fresh geometry and OCR evidence.
+    relocated_index = next(index for index, item in enumerate(current_messages) if item is current_source)
+    current_source = copy.deepcopy(current_source)
+    current_source["message_fingerprint"] = original_fingerprint
+    current_messages = list(current_messages)
+    current_messages[relocated_index] = current_source
+    moved = int((current_source.get("bounds") or {}).get("y", 0)) < initial_y
+    return current_page, current_messages, current_source, moved
 
 
 def quote_preview_matches(candidates: list[dict[str, Any]], source_text: str) -> bool:
@@ -369,7 +619,16 @@ def find_new_outgoing(
     return matches[0][1]
 
 
-def append_experience(args: argparse.Namespace, *, started: float, recovered: bool, status: str, sent: bool) -> None:
+def append_experience(
+    args: argparse.Namespace,
+    *,
+    started: float,
+    recovered: bool,
+    status: str,
+    sent: bool,
+    metrics: dict[str, Any],
+    failure_code: str | None,
+) -> None:
     if not args.experience_path:
         return
     path = Path(args.experience_path)
@@ -381,7 +640,20 @@ def append_experience(args: argparse.Namespace, *, started: float, recovered: bo
         "conversation_recovered": recovered,
         "status": status,
         "sent": sent,
-        "enhancement_classification": "none",
+        "new_record_count": int(metrics.get("new_record_count", 0)),
+        "new_message_count": int(metrics.get("new_message_count", 0)),
+        "voice_count": int(metrics.get("voice_count", 0)),
+        "low_confidence_incoming_count": int(metrics.get("low_confidence_incoming_count", 0)),
+        "delta_status": metrics.get("delta_status"),
+        "reply_anchor_verified": bool(metrics.get("reply_anchor_verified", False)),
+        "source_fingerprint_rebound": bool(metrics.get("source_fingerprint_rebound", False)),
+        "send_attempted": bool(metrics.get("send_attempted", False)),
+        "failure_code": failure_code,
+        "enhancement_classification": (
+            "wechat_candidate"
+            if (failure_code or "").startswith("WECHAT_") or int(metrics.get("low_confidence_incoming_count", 0)) > 0
+            else "none"
+        ),
     }
     with path.open("a", encoding="utf-8", newline="\n") as stream:
         stream.write(json.dumps(record, ensure_ascii=False, separators=(",", ":")) + "\n")
@@ -394,6 +666,8 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
     recovered = False
     status = "error"
     sent = False
+    failure_code: str | None = None
+    metrics: dict[str, Any] = {}
     try:
         host.request(
             "interaction.begin",
@@ -407,7 +681,23 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         interaction_started = True
         page, recovered = acquire_group(host, args)
         messages = structured_messages(page, args.content_region)
-        store, state, new_messages = checkpoint_observation(args, messages)
+        store, state, new_records, delta_status = checkpoint_observation(args, messages)
+        new_messages = [item for item in new_records if is_conversation_message(item, incoming_only=True)]
+        context = accumulated_context(state)
+        conversation_messages = [item for item in context if is_conversation_message(item)]
+        context_tail_limit = max(1, min(100, int(args.context_tail_limit)))
+        context_tail = conversation_messages[-context_tail_limit:]
+        metrics.update(
+            {
+                "new_record_count": len(new_records),
+                "new_message_count": len(new_messages),
+                "voice_count": sum(1 for item in new_messages if item.get("content_kind") == "voice"),
+                "low_confidence_incoming_count": sum(
+                    1 for item in new_messages if item.get("confidence_level") == "low"
+                ),
+                "delta_status": delta_status,
+            }
+        )
 
         if args.operation == "observe":
             status = "observed"
@@ -417,17 +707,17 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
                 "conversation_recovered": recovered,
                 "message_count": len(messages),
                 "new_message_count": len(new_messages),
+                "new_record_count": len(new_records),
+                "delta_status": delta_status,
+                "new_messages": [message_payload(item, include_source_evidence=True) for item in new_messages],
+                "new_records": [message_payload(item) for item in new_records],
+                "conversation_message_count": len(conversation_messages),
+                "conversation_record_count": len(context),
+                "conversation_context_tail": [message_payload(item) for item in context_tail],
+                "conversation_context_tail_count": len(context_tail),
+                "conversation_context_complete_in_state": True,
                 "initial_participation_verified": initial_participation_verified(state),
-                "messages": [
-                    {
-                        "message_fingerprint": item.get("message_fingerprint"),
-                        "direction": item.get("direction"),
-                        "content_kind": item.get("content_kind"),
-                        "content": item.get("content"),
-                        "bounds": item.get("bounds"),
-                    }
-                    for item in messages
-                ],
+                "messages": [message_payload(item, include_source_evidence=True) for item in messages],
                 "state_path": str(Path(args.state_path).resolve()),
                 "duration_ms": int((time.monotonic() - started) * 1000),
             }
@@ -490,13 +780,25 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         if args.participation_kind == "initial_participation" and initial_participation_verified(state):
             raise WeChatWaveError("INITIAL_PARTICIPATION_ALREADY_VERIFIED", "The initial participation was already sent and verified.")
 
-        source = select_source(
+        source, source_fingerprint_rebound = select_requested_source(
             messages,
             source_text=args.reply_source_text,
             source_fingerprint=args.reply_source_fingerprint,
             maximum_anchor_y=args.maximum_anchor_y,
         )
-        source_x, source_y = center(source)
+        metrics["source_fingerprint_rebound"] = source_fingerprint_rebound
+        if source_fingerprint_rebound:
+            messages = bind_selected_source(messages, source)
+        page, messages, source, source_repositioned = reposition_reply_source(
+            host,
+            args,
+            page,
+            messages,
+            source,
+        )
+        if source_repositioned:
+            store, state, _, _ = checkpoint_observation(args, messages)
+        source_x, source_y = reply_anchor_point(source)
         host.request(
             "input.right_click",
             target_params(args)
@@ -508,33 +810,62 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
             },
         )
 
-        def read_quote_action() -> tuple[dict[str, Any], dict[str, Any]]:
-            menu = observe_group(host, args, args.menu_region)
-            action = find_unique_text(
-                menu.get("message_candidates") or [],
-                args.quote_label,
-                region=args.menu_region,
-                code="WECHAT_QUOTE_ACTION_NOT_UNIQUE",
+        try:
+            quote_action_evidence = wait_semantic(
+                lambda: invoke_quote_action_uia(host, args),
+                timeout_ms=args.wait_timeout_ms,
+                poll_ms=args.poll_ms,
+                retry_codes={"WECHAT_QUOTE_MENU_NOT_UNIQUE", "WECHAT_QUOTE_ACTION_NOT_UNIQUE"},
             )
-            return menu, action
+        except WeChatWaveError:
+            # Older builds may expose no usable UIA menu tree. Retain the OCR
+            # fallback only when the localized quote label is visibly unique.
+            def read_quote_action() -> tuple[dict[str, Any], dict[str, Any]]:
+                menu = observe_group(host, args, args.menu_region)
+                candidates = menu.get("message_candidates") or []
+                try:
+                    action = find_unique_text(
+                        candidates,
+                        args.quote_label,
+                        region=args.menu_region,
+                        code="WECHAT_QUOTE_ACTION_NOT_UNIQUE",
+                    )
+                except WeChatWaveError as exc:
+                    raise WeChatWaveError(
+                        exc.code,
+                        str(exc),
+                        {
+                            "match_count": int((exc.details or {}).get("match_count", 0)),
+                            "reply_anchor": {"x": source_x, "y": source_y},
+                            "observed_menu_candidates": [
+                                {
+                                    "text": str(candidate.get("text") or ""),
+                                    "bounds": candidate.get("bounds"),
+                                }
+                                for candidate in candidates
+                            ],
+                        },
+                    ) from exc
+                return menu, action
 
-        menu, quote_action = wait_semantic(
-            read_quote_action,
-            timeout_ms=args.wait_timeout_ms,
-            poll_ms=args.poll_ms,
-            retry_codes={"WECHAT_QUOTE_ACTION_NOT_UNIQUE"},
-        )
-        quote_x, quote_y = center(quote_action)
-        host.request(
-            "input.click",
-            target_params(args)
-            | {
-                "screenshot_id": str((menu.get("screenshot") or {}).get("screenshot_id") or ""),
-                "x": quote_x,
-                "y": quote_y,
-                "action_label": "引用具体消息",
-            },
-        )
+            menu, quote_action = wait_semantic(
+                read_quote_action,
+                timeout_ms=args.wait_timeout_ms,
+                poll_ms=args.poll_ms,
+                retry_codes={"WECHAT_QUOTE_ACTION_NOT_UNIQUE"},
+            )
+            quote_x, quote_y = center(quote_action)
+            host.request(
+                "input.click",
+                target_params(args)
+                | {
+                    "screenshot_id": str((menu.get("screenshot") or {}).get("screenshot_id") or ""),
+                    "x": quote_x,
+                    "y": quote_y,
+                    "action_label": "引用具体消息",
+                },
+            )
+            quote_action_evidence = {"mode": "visible_ocr_menu_item"}
 
         def read_quote_preview() -> dict[str, Any]:
             preview = observe_group(host, args, args.composer_region)
@@ -561,7 +892,9 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
             "status": "verified",
             "mode": "wechat_quote_preview",
             "message_fingerprint": source["message_fingerprint"],
+            "quote_action": quote_action_evidence,
         }
+        metrics["reply_anchor_verified"] = True
         state, draft = register_draft(
             state,
             reply_to_message_fingerprints=[source["message_fingerprint"]],
@@ -585,6 +918,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         store.save(state, reason="wechat_reply_preflight_verified")
         state = begin_send(state, attempt["idempotency_key"])
         store.save(state, reason="wechat_reply_send_started")
+        metrics["send_attempted"] = True
 
         host.request(
             "input.click",
@@ -662,8 +996,19 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
             "state_path": str(Path(args.state_path).resolve()),
             "duration_ms": int((time.monotonic() - started) * 1000),
         }
+    except (DeskPilotError, MessagingStateError, WeChatWaveError) as exc:
+        failure_code = str(getattr(exc, "code", "WECHAT_GROUP_WAVE_FAILED"))
+        raise
     finally:
-        append_experience(args, started=started, recovered=recovered, status=status, sent=sent)
+        append_experience(
+            args,
+            started=started,
+            recovered=recovered,
+            status=status,
+            sent=sent,
+            metrics=metrics,
+            failure_code=failure_code,
+        )
         if interaction_started:
             try:
                 host.request("interaction.end", {})
@@ -688,8 +1033,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--composer-region", type=parse_region, default=parse_region("308,475,590,232"))
     parser.add_argument("--composer-x", type=int, default=600)
     parser.add_argument("--composer-y", type=int, default=610)
-    parser.add_argument("--maximum-anchor-y", type=int, default=430)
+    parser.add_argument("--maximum-anchor-y", type=int, default=320)
+    parser.add_argument("--anchor-scroll-amount", type=int, default=240)
     parser.add_argument("--quote-label", default="引用")
+    parser.add_argument("--menu-class-name", default="CMenuWnd")
     parser.add_argument("--reply-source-text")
     parser.add_argument("--reply-source-fingerprint")
     parser.add_argument("--reply-text", default="")
@@ -701,6 +1048,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--wait-timeout-ms", type=int, default=1500)
     parser.add_argument("--send-verify-timeout-ms", type=int, default=2500)
     parser.add_argument("--poll-ms", type=int, default=75)
+    parser.add_argument("--context-tail-limit", type=int, default=12)
     parser.add_argument("--show-action-trace", action="store_true")
     parser.add_argument("--state-path", required=True)
     parser.add_argument("--experience-path")

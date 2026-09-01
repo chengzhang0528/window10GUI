@@ -21,8 +21,13 @@ AI assistant.
    `scripts/run_group_wave.py` for this mechanical path; it observes
    immediately and polls only after a declared transient miss.
 2. Reassert the exact group title, collect only the delta after the saved
-   cursor, include enough preceding messages to understand the current turn,
-   detect voice bubbles, and checkpoint the structured context immediately.
+   visible sequence, include the accumulated structured context needed to
+   understand the current turn, detect voice bubbles, and checkpoint it
+   immediately. Return the actual new-message records and OCR confidence rather
+   than only a count. The accumulated context grows only from sequence-proven
+   deltas; return its total count plus a bounded recent tail while retaining the
+   complete context in the durable state file. On a continuity gap, report the
+   gap instead of duplicating the whole viewport.
 3. If this is the initial takeover, or a prior baseline exists without a
    `sent_verified` initial-participation record, send exactly one low-risk
    initial participation before allowing `no_action`. Treat baseline messages
@@ -38,7 +43,12 @@ AI assistant.
 6. When participating, choose one exact source message, establish WeChat's
    visible quote/reply preview, compose one concise contribution with the exact
    disclosure, send once under one idempotency key, and verify the new outgoing
-   message in the same group.
+   message in the same group. A newest message near the composer remains a valid
+   source candidate; right-click the strongest body OCR line and use the quote
+   menu's unique UIA `MenuItem` plus the quote preview as the final anchor gates
+   instead of switching to an older message solely because of its vertical
+   position. The menu is an independent `CMenuWnd`; main-window OCR may crop its
+   lower items and is only a visible-label fallback.
 7. End the interaction, restore focus best-effort, append a de-identified run
    record, and perform the enhancement audit below.
 
