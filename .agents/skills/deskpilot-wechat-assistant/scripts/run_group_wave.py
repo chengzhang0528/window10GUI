@@ -334,6 +334,16 @@ def is_conversation_message(message: dict[str, Any], *, incoming_only: bool = Fa
     return str(message.get("content_kind") or "unknown") not in {"system", "timestamp", "unknown"}
 
 
+def is_proven_incoming_participant_message(message: dict[str, Any]) -> bool:
+    if not is_conversation_message(message, incoming_only=True):
+        return False
+    if str(message.get("confidence_level") or "low") == "low":
+        return False
+    if message.get("content_kind") == "text" and len(normalize_text(str(message.get("content") or ""))) < 2:
+        return False
+    return True
+
+
 def accumulated_context(state: dict[str, Any]) -> list[dict[str, Any]]:
     observed = state.get("observed_messages") or {}
     return [
@@ -443,6 +453,36 @@ def bind_selected_source(messages: list[dict[str, Any]], source: dict[str, Any])
     rebound = list(messages)
     rebound[indexes[0]] = source
     return rebound
+
+
+def bind_source_to_persisted_context(
+    source: dict[str, Any],
+    messages: list[dict[str, Any]],
+    state: dict[str, Any],
+    content_region: dict[str, int],
+) -> tuple[dict[str, Any], list[dict[str, Any]], bool]:
+    observed = state.get("observed_messages") or {}
+    fingerprint = str(source.get("message_fingerprint") or "")
+    if fingerprint in observed:
+        return source, messages, False
+
+    matches = [
+        item
+        for item in accumulated_context(state)
+        if is_conversation_message(item, incoming_only=True)
+        and item.get("content_kind") == "text"
+        and not is_verified_outgoing(item, state, content_region)
+        and messages_match(item, source)
+    ]
+    if len(matches) != 1:
+        raise WeChatWaveError(
+            "WECHAT_REPLY_SOURCE_PERSISTED_BINDING_NOT_UNIQUE",
+            "The visible reply source did not map to one persisted conversation message.",
+            {"match_count": len(matches)},
+        )
+    rebound = copy.deepcopy(source)
+    rebound["message_fingerprint"] = matches[0]["message_fingerprint"]
+    return rebound, bind_selected_source(messages, rebound), True
 
 
 def reply_anchor_point(message: dict[str, Any]) -> tuple[int, int]:
@@ -664,7 +704,7 @@ def consecutive_verified_assistant_sends(
         if matched_attempts:
             attempts.update(matched_attempts)
             continue
-        if is_conversation_message(message, incoming_only=True):
+        if is_proven_incoming_participant_message(message):
             break
     return len(attempts)
 
@@ -901,8 +941,15 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
             source_fingerprint=args.reply_source_fingerprint,
             maximum_anchor_y=args.maximum_anchor_y,
         )
+        source, messages, persisted_source_rebound = bind_source_to_persisted_context(
+            source,
+            messages,
+            state,
+            args.content_region,
+        )
+        source_fingerprint_rebound = source_fingerprint_rebound or persisted_source_rebound
         metrics["source_fingerprint_rebound"] = source_fingerprint_rebound
-        if source_fingerprint_rebound:
+        if source_fingerprint_rebound and not persisted_source_rebound:
             messages = bind_selected_source(messages, source)
         page, messages, source, source_repositioned = reposition_reply_source(
             host,

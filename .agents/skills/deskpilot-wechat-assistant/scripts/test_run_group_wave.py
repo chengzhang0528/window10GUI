@@ -15,6 +15,7 @@ from run_group_wave import (  # noqa: E402
     WeChatWaveError,
     accumulated_context,
     bind_selected_source,
+    bind_source_to_persisted_context,
     checkpoint_observation,
     consecutive_verified_assistant_sends,
     enforce_participation_guard,
@@ -23,6 +24,7 @@ from run_group_wave import (  # noqa: E402
     initial_participation_verified,
     invoke_quote_action_uia,
     is_conversation_message,
+    is_proven_incoming_participant_message,
     is_verified_outgoing,
     message_payload,
     quote_preview_matches,
@@ -168,6 +170,42 @@ class RunGroupWaveTests(unittest.TestCase):
         rebound_messages = bind_selected_source([message("shifted", "那我得多试试", y=317)], selected)
         self.assertEqual("persisted", rebound_messages[0]["message_fingerprint"])
 
+    def test_visible_source_rebinds_to_unique_persisted_context_before_draft(self):
+        persisted = message("persisted", "那我得多试试", y=317)
+        current = message("current", "那 我 得 多 试 试", y=317)
+        state = {
+            "observed_message_fingerprints": ["persisted"],
+            "observed_messages": {"persisted": persisted},
+            "send_ledger": {},
+        }
+        source, rebound_messages, rebound = bind_source_to_persisted_context(
+            current,
+            [current],
+            state,
+            {"x": 300, "y": 75, "width": 600, "height": 480},
+        )
+        self.assertTrue(rebound)
+        self.assertEqual("persisted", source["message_fingerprint"])
+        self.assertEqual("persisted", rebound_messages[0]["message_fingerprint"])
+
+    def test_visible_source_rejects_ambiguous_persisted_context(self):
+        current = message("current", "重复消息", y=317)
+        state = {
+            "observed_message_fingerprints": ["old-1", "old-2"],
+            "observed_messages": {
+                "old-1": message("old-1", "重复消息", y=200),
+                "old-2": message("old-2", "重复消息", y=250),
+            },
+            "send_ledger": {},
+        }
+        with self.assertRaisesRegex(WeChatWaveError, "one persisted conversation message"):
+            bind_source_to_persisted_context(
+                current,
+                [current],
+                state,
+                {"x": 300, "y": 75, "width": 600, "height": 480},
+            )
+
     def test_explicit_unique_short_source_is_allowed(self):
         selected = select_source(
             [message("m1", "可以", y=300), message("m2", "另一条消息", y=350)],
@@ -308,6 +346,12 @@ class RunGroupWaveTests(unittest.TestCase):
             )
         )
         self.assertFalse(is_conversation_message(message("s1", "系统记录", direction="unknown"), incoming_only=True))
+
+    def test_low_confidence_single_glyph_does_not_prove_participant_input(self):
+        artifact = message("artifact", "0", direction="incoming")
+        artifact["confidence_level"] = "low"
+        artifact["confidence_reasons"].append("very_short_ocr_fragment")
+        self.assertFalse(is_proven_incoming_participant_message(artifact))
 
     def test_accumulated_context_keeps_persisted_order(self):
         first = message("m1", "第一条")
@@ -497,6 +541,35 @@ class RunGroupWaveTests(unittest.TestCase):
         }
         self.assertEqual(
             1,
+            consecutive_verified_assistant_sends(
+                state,
+                {"x": 300, "y": 75, "width": 600, "height": 480},
+            ),
+        )
+
+    def test_low_confidence_avatar_artifact_does_not_reset_streak(self):
+        first = message("sent-1", "第一条助手回复", direction="outgoing")
+        artifact = message("artifact", "0", direction="incoming")
+        artifact["confidence_level"] = "low"
+        second = message("sent-2", "第二条助手回复", direction="outgoing")
+        state = {
+            "observed_message_fingerprints": ["sent-1", "artifact", "sent-2"],
+            "observed_messages": {"sent-1": first, "artifact": artifact, "sent-2": second},
+            "send_ledger": {
+                "send-1": {
+                    "status": "sent_verified",
+                    "exact_text": first["content"],
+                    "verification_evidence": {"message_fingerprint": "sent-1"},
+                },
+                "send-2": {
+                    "status": "sent_verified",
+                    "exact_text": second["content"],
+                    "verification_evidence": {"message_fingerprint": "sent-2"},
+                },
+            },
+        }
+        self.assertEqual(
+            2,
             consecutive_verified_assistant_sends(
                 state,
                 {"x": 300, "y": 75, "width": 600, "height": 480},

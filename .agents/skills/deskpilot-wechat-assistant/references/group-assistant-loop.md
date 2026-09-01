@@ -76,8 +76,9 @@ AI assistant.
   text also invites the rest of the group to participate.
 - A verified assistant send increases the current consecutive-send streak. A
   proven incoming participant message resets it. Timestamps, system records,
-  direction guesses, and unverified/manual outgoing bubbles do not reset or
-  increase this assistant-specific streak.
+  low-confidence single-glyph/avatar OCR artifacts, direction guesses, and
+  unverified/manual outgoing bubbles do not reset or increase this
+  assistant-specific streak.
 
 ## De-identified experience record
 

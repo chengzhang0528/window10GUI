@@ -74,7 +74,10 @@ unless diagnosing a script failure.
   send ledger and right-side geometry so an OCR-misclassified assistant bubble
   is never surfaced as a new incoming message.
 - Before input, recheck conversation identity, fresh quote anchor, idempotency
-  key, disclosure, and composer state. After input, verify one new outgoing
+  key, disclosure, and composer state. A current visible OCR fingerprint may
+  drift from the persisted context fingerprint; before opening the reply menu,
+  rebind it only when one sequence-retained persisted message matches, and stop
+  on zero or ambiguous matches. After input, verify one new outgoing
   message in the same conversation. On uncertain outcome, observe only; never
   resend automatically.
 - Always end or cancel the interaction and restore the user's prior foreground
