@@ -1,0 +1,4 @@
+interface:
+  display_name: "DeskPilot 微信助手"
+  short_description: "稳定监控、参与并验证 Windows 微信群聊助手"
+  default_prompt: "Use $deskpilot-wechat-assistant to monitor an exact WeChat conversation and participate safely with verified context."
