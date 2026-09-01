@@ -288,6 +288,7 @@ def select_source(
 ) -> dict[str, Any]:
     matches = []
     wanted = normalize_text(source_text or "")
+    explicit_source = bool(wanted or source_fingerprint)
     for message in messages:
         if message.get("direction") != "incoming" or message.get("content_kind") != "text":
             continue
@@ -299,7 +300,11 @@ def select_source(
         fuzzy_ratio = difflib.SequenceMatcher(None, wanted, observed).ratio() if wanted and observed else 0.0
         if wanted and not (wanted == observed or wanted in observed or observed in wanted or fuzzy_ratio >= 0.82):
             continue
-        if len(observed) >= 3:
+        # Short chat replies such as "可以" are valid only when the caller
+        # explicitly identifies them and the current observation proves one
+        # unique match. Automatic source selection keeps the stronger length
+        # floor so generic OCR fragments such as "0" are never chosen.
+        if len(observed) >= (1 if explicit_source else 3):
             matches.append(message)
     if not matches:
         raise WeChatWaveError("WECHAT_REPLY_SOURCE_NOT_VISIBLE", "No safe visible incoming source message matched the reply request.")

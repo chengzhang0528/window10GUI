@@ -81,6 +81,24 @@ class RunGroupWaveTests(unittest.TestCase):
         )
         self.assertEqual("m1", selected["message_fingerprint"])
 
+    def test_explicit_unique_short_source_is_allowed(self):
+        selected = select_source(
+            [message("m1", "可以", y=300), message("m2", "另一条消息", y=350)],
+            source_text="可以",
+            source_fingerprint=None,
+            maximum_anchor_y=430,
+        )
+        self.assertEqual("m1", selected["message_fingerprint"])
+
+    def test_automatic_source_selection_still_rejects_short_ocr_fragments(self):
+        selected = select_source(
+            [message("m1", "0", y=300), message("m2", "足够长的消息", y=350)],
+            source_text=None,
+            source_fingerprint=None,
+            maximum_anchor_y=430,
+        )
+        self.assertEqual("m2", selected["message_fingerprint"])
+
     def test_quote_preview_requires_source_fragment(self):
         self.assertTrue(quote_preview_matches([candidate("张三：咖啡尝了一口不喝了", 350, 500)], "咖啡尝了一口不喝了"))
         self.assertTrue(quote_preview_matches([candidate("张三：咖啡尝了一囗不了", 350, 500)], "咖啡尝了一囗不喝了"))
