@@ -27,7 +27,9 @@ AI assistant.
    than only a count. The accumulated context grows only from sequence-proven
    deltas; return its total count plus a bounded recent tail while retaining the
    complete context in the durable state file. On a continuity gap, report the
-   gap instead of duplicating the whole viewport.
+   gap instead of duplicating the whole viewport. Exclude records proven by the
+   sent ledger and right-side geometry from `new_messages`, even if generic OCR
+   direction inference labels that outgoing bubble as incoming.
 3. If this is the initial takeover, or a prior baseline exists without a
    `sent_verified` initial-participation record, send exactly one low-risk
    initial participation before allowing `no_action`. Treat baseline messages

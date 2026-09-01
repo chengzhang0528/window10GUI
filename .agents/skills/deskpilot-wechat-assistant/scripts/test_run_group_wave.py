@@ -21,6 +21,7 @@ from run_group_wave import (  # noqa: E402
     initial_participation_verified,
     invoke_quote_action_uia,
     is_conversation_message,
+    is_verified_outgoing,
     message_payload,
     quote_preview_matches,
     reply_anchor_point,
@@ -212,6 +213,46 @@ class RunGroupWaveTests(unittest.TestCase):
         )
         self.assertEqual("new", found["message_fingerprint"])
 
+    def test_verified_outgoing_is_not_reported_as_new_incoming(self):
+        reply = "我是点点点小助手，代我和大家沟通。别为了满足好奇心把钱包和胃都搭进去。"
+        observed = message("sent-fingerprint", "别为了满足好奇心把钱包和胃都搭进去", direction="incoming")
+        observed["bounds"] = {"x": 445, "y": 480, "width": 364, "height": 50}
+        state = {
+            "send_ledger": {
+                "send-1": {
+                    "status": "sent_verified",
+                    "exact_text": reply,
+                    "verification_evidence": {"message_fingerprint": "sent-fingerprint"},
+                }
+            }
+        }
+        self.assertTrue(
+            is_verified_outgoing(
+                observed,
+                state,
+                {"x": 308, "y": 75, "width": 590, "height": 480},
+            )
+        )
+
+    def test_unrelated_left_incoming_is_not_hidden_by_send_ledger(self):
+        observed = message("incoming", "这是另一条新消息", direction="incoming")
+        observed["bounds"] = {"x": 390, "y": 300, "width": 120, "height": 20}
+        state = {
+            "send_ledger": {
+                "send-1": {
+                    "status": "sent_verified",
+                    "exact_text": "我是点点点小助手，代我和大家沟通。完全不同的回复",
+                }
+            }
+        }
+        self.assertFalse(
+            is_verified_outgoing(
+                observed,
+                state,
+                {"x": 308, "y": 75, "width": 590, "height": 480},
+            )
+        )
+
     def test_reply_fragment_tolerates_bounded_ocr_drift(self):
         self.assertGreaterEqual(
             reply_fragment_strength("大冢有没有什么东西也是试过一次就彻底不惦记了", "大家有没有什么东西也是试过一次就彻底不惦记了"),
@@ -302,6 +343,25 @@ class RunGroupWaveTests(unittest.TestCase):
                 ["m1", "m2", "m3"],
                 [item["message_fingerprint"] for item in accumulated_context(updated)],
             )
+
+    def test_post_send_checkpoint_appends_verified_outgoing_context(self):
+        with tempfile.TemporaryDirectory() as directory:
+            args = argparse.Namespace(
+                state_path=str(Path(directory) / "conversation-state.json"),
+                process="Weixin",
+                group_title="测试群",
+                identity_region={"x": 300, "y": 0, "width": 600, "height": 90},
+                content_region={"x": 300, "y": 75, "width": 600, "height": 480},
+                conversation_key=None,
+            )
+            checkpoint_observation(args, [message("incoming", "问题")])
+            _, updated, delta, status = checkpoint_observation(
+                args,
+                [message("incoming-shifted", "问题"), message("outgoing", "回复", direction="outgoing")],
+            )
+            self.assertEqual("overlap", status)
+            self.assertEqual(["outgoing"], [item["message_fingerprint"] for item in delta])
+            self.assertEqual(2, len(accumulated_context(updated)))
 
     def test_new_message_payload_preserves_ocr_evidence(self):
         item = message("m1", "识别文字")

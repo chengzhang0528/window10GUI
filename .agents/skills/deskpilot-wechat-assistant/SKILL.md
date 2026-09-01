@@ -64,7 +64,9 @@ unless diagnosing a script failure.
   de-duplicated conversation count plus a bounded recent context tail to the
   caller. The complete accumulated context stays in the caller-owned state file
   so routine polling remains token-efficient. A continuity gap is not permission
-  to add the whole viewport again.
+  to add the whole viewport again. Reconcile new records against the verified
+  send ledger and right-side geometry so an OCR-misclassified assistant bubble
+  is never surfaced as a new incoming message.
 - Before input, recheck conversation identity, fresh quote anchor, idempotency
   key, disclosure, and composer state. After input, verify one new outgoing
   message in the same conversation. On uncertain outcome, observe only; never

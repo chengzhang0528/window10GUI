@@ -619,6 +619,23 @@ def find_new_outgoing(
     return matches[0][1]
 
 
+def is_verified_outgoing(
+    message: dict[str, Any],
+    state: dict[str, Any],
+    content_region: dict[str, int],
+) -> bool:
+    for attempt in (state.get("send_ledger") or {}).values():
+        if attempt.get("status") != "sent_verified":
+            continue
+        evidence_fingerprint = str((attempt.get("verification_evidence") or {}).get("message_fingerprint") or "")
+        if evidence_fingerprint and evidence_fingerprint == message.get("message_fingerprint"):
+            return True
+        exact_text = str(attempt.get("exact_text") or "")
+        if exact_text and find_new_outgoing([message], exact_text, set(), content_region) is not None:
+            return True
+    return False
+
+
 def append_experience(
     args: argparse.Namespace,
     *,
@@ -682,7 +699,12 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         page, recovered = acquire_group(host, args)
         messages = structured_messages(page, args.content_region)
         store, state, new_records, delta_status = checkpoint_observation(args, messages)
-        new_messages = [item for item in new_records if is_conversation_message(item, incoming_only=True)]
+        new_messages = [
+            item
+            for item in new_records
+            if is_conversation_message(item, incoming_only=True)
+            and not is_verified_outgoing(item, state, args.content_region)
+        ]
         context = accumulated_context(state)
         conversation_messages = [item for item in context if is_conversation_message(item)]
         context_tail_limit = max(1, min(100, int(args.context_tail_limit)))
@@ -942,16 +964,16 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         )
         old_fingerprints = {item["message_fingerprint"] for item in messages}
 
-        def read_sent() -> tuple[dict[str, Any], dict[str, Any]]:
+        def read_sent() -> tuple[dict[str, Any], list[dict[str, Any]], dict[str, Any]]:
             after = observe_group(host, args)
             after_messages = structured_messages(after, args.content_region)
             outgoing = find_new_outgoing(after_messages, args.reply_text, old_fingerprints, args.content_region)
             if outgoing is None:
                 raise WeChatWaveError("WECHAT_SEND_NOT_YET_VERIFIED", "The new outgoing reply is not yet visible.")
-            return after, outgoing
+            return after, after_messages, outgoing
 
         try:
-            after, outgoing = wait_semantic(
+            after, after_messages, outgoing = wait_semantic(
                 read_sent,
                 timeout_ms=args.send_verify_timeout_ms,
                 poll_ms=args.poll_ms,
@@ -967,6 +989,9 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
             store.save(state, reason="wechat_reply_send_uncertain")
             raise
 
+        # The verified outgoing bubble belongs to the complete conversation
+        # context now, not at the next scheduler wake-up.
+        store, state, _, _ = checkpoint_observation(args, after_messages)
         state = record_send_observation(
             state,
             attempt["idempotency_key"],
