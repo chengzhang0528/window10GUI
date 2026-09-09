@@ -1,0 +1,4 @@
+interface:
+  display_name: "DeskPilot Browser"
+  short_description: "Teach agents to operate Chrome through CDP and GUI fallback"
+  default_prompt: "Use $deskpilot-browser for DeskPilot Chrome automation with semantic waits, CDP-first actions, GUI fallback, diagnostics, and verification."

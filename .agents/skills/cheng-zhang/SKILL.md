@@ -15,14 +15,16 @@ Prepare concise replies in the user's authorized communication style while keepi
 4. Produce one preferred single-message draft. Samples may contain several consecutive bubbles, but per-message approval takes precedence: do not split a draft into multiple sends or queue follow-up bubbles unless the user explicitly asks for separately approved messages. Keep optional alternatives to one only when they represent a material tone choice.
 5. Stop in `awaiting_approval` and show an approval packet containing:
    - conversation identity;
-   - intended recipient or quoted message summary;
-   - a unique `draft_id` and the exact draft text;
+   - intended recipient or quoted message summary and its source message fingerprint(s);
+   - the concise evidence basis used to draft;
+   - a unique `draft_id`, style profile version, and the exact draft text;
    - any factual uncertainty or commitment the user must resolve;
    - the instruction `发送 <draft_id>` or a request for edits.
 6. Treat only `发送 <draft_id>`, `按此发送 <draft_id>`, or an unambiguous `发送` when exactly one draft is pending in the immediately preceding turn as authorization. `继续`, general agreement, approval of a plan, or earlier authorization to use this skill is not send approval.
 7. Any edited text creates a new draft version and requires fresh approval. Re-observe and require fresh approval when the conversation identity changes or a new relevant message makes the approved reply misleading.
 8. After approval, use one DeskPilot lease and a fresh screenshot to assert the same conversation, focus the composer, enter the exact approved text, send once, and read the message area again. Report `sent_verified` only when the approved text is visibly present in that conversation.
-9. On `BATCH_OUTCOME_UNKNOWN` or missing post-send evidence, re-observe without resending and report `send_uncertain`. Always end or cancel the lease and restore the user's foreground window best-effort.
+9. Create one idempotency key bound to the conversation, source message fingerprint(s), `draft_id`, and draft version. On `BATCH_OUTCOME_UNKNOWN` or missing post-send evidence, re-observe the same attempt without resending and report `send_uncertain`. Advance the reply cursor only after `sent_verified`.
+10. If the user takes over, cancel the active DeskPilot interaction, expire all unsent drafts, and require a fresh observation plus fresh per-message approval before any later send. Always end or cancel the lease and restore the user's foreground window best-effort.
 
 ## Style and data boundaries
 

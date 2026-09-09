@@ -1,0 +1,4 @@
+interface:
+  display_name: "DeskPilot 场景进化"
+  short_description: "只需网站与功能，自主探索并验证纯数据业务闭环，异常接管后修订复跑"
+  default_prompt: "Use $deskpilot-flow-evolution to turn a website and feature into a verified reusable JSON business loop, using Luna and DeskPilot for discovery, execution and recovery."

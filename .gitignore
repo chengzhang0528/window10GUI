@@ -1,0 +1,8 @@
+**/bin/
+**/obj/
+*.user
+*.suo
+tmp-compile-audit.exe
+artifacts/
+**/__pycache__/
+*.py[cod]

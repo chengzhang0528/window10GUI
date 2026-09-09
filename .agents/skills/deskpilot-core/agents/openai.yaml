@@ -1,0 +1,4 @@
+interface:
+  display_name: "DeskPilot Core"
+  short_description: "Teach agents to operate the DeskPilot Windows desktop base"
+  default_prompt: "Use $deskpilot-core to drive DeskPilot through its public NDJSON protocol with session, lease, observe, act, verify, and cleanup rules."

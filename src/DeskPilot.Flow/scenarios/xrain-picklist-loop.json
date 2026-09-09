@@ -1,0 +1,1268 @@
+{
+  "schema_version": 1,
+  "scenario_id": "xrain-picklist-loop",
+  "inputs": {
+    "url": "https://lower-code.atlas-xrain.com/picklists",
+    "overviewUrl": "https://lower-code.atlas-xrain.com/overview",
+    "code": "deskpilot_loop_20260907_a1__c",
+    "label": "DeskPilot闭环验证20260907A1",
+    "updatedLabel": "DeskPilot闭环验证20260907A1-已更新",
+    "description": "DeskPilot isolated closed-loop validation A1",
+    "updatedDescription": "DeskPilot closed-loop validation A1 updated and verified",
+    "injectedCode": "deskpilot_loop_20260907_a1_unexpected__c",
+    "detailBase": "https://lower-code.atlas-xrain.com/picklists/",
+    "childCode": "deskpilot_loop_value_20260907_a1",
+    "childLabel": "DeskPilot闭环子值20260907A1",
+    "childUpdatedLabel": "DeskPilot闭环子值20260907A1-已更新",
+    "childDescription": "DeskPilot isolated child value A1",
+    "childUpdatedDescription": "DeskPilot child value A1 updated and verified",
+    "childColor": "#3366ff",
+    "childUpdatedColor": "#ff8800"
+  },
+  "targets": {
+    "newSet": {"selector":"button.ant-btn-primary","text":{"contains":"新建选项集"}},
+    "dialog": {"selector":"[role=\"dialog\"]"},
+    "name": {"selector":"[role=\"dialog\"] #name"},
+    "label": {"selector":"[role=\"dialog\"] #label"},
+    "description": {"selector":"[role=\"dialog\"] #helpText"},
+    "enabled": {"selector":"[role=\"dialog\"] .ant-switch"},
+    "save": {"selector":"[role=\"dialog\"] button.ant-btn-primary","text":{"contains":"保存"}},
+    "cancel": {"selector":"[role=\"dialog\"] button.ant-btn-default","text":{"contains":"取消"}},
+    "ownRow": {"selector":"tbody tr.ant-table-row","text":{"contains":{"input":"code"}}},
+    "editOwn": {"selector":"button[aria-label^=\"编辑:\"][aria-label$=\"DeskPilot闭环验证20260907A1\"]"},
+    "editUpdated": {"selector":"button[aria-label^=\"编辑:\"][aria-label$=\"DeskPilot闭环验证20260907A1-已更新\"]"},
+    "deleteUpdated": {"selector":"button[aria-label^=\"删除:\"][aria-label$=\"DeskPilot闭环验证20260907A1-已更新\"]"},
+    "confirmation": {"selector":".ant-popover.ant-popconfirm:not(.ant-popover-hidden)"},
+    "cancelDelete": {"selector":".ant-popover.ant-popconfirm:not(.ant-popover-hidden) .ant-popconfirm-buttons .ant-btn-default"},
+    "confirmDelete": {"selector":".ant-popover.ant-popconfirm:not(.ant-popover-hidden) .ant-popconfirm-buttons button.ant-btn-dangerous"},
+    "loading": {"selector":".ant-spin-spinning"},
+    "builtinReferenceRow": {"selector":"table tbody tr.ant-table-row","text":{"contains":"httpInterfaceKind"}},
+    "viewUpdated": {"selector":"button[aria-label=\"查看: DeskPilot闭环验证20260907A1-已更新\"]"},
+    "itemsTab": {"selector":"div[data-node-key=\"items\"] [role=\"tab\"]"},
+    "newItem": {"selector":"button.ant-btn-primary","text":{"contains":"新建选项值"}},
+    "color": {"selector":"[role=\"dialog\"] input[aria-label=\"颜色\"]"},
+    "ownChild": {"selector":"table tbody tr.ant-table-row","text":{"contains":{"input":"childCode"}}},
+    "editChild": {"selector":"button[aria-label=\"编辑: DeskPilot闭环子值20260907A1\"]"},
+    "editUpdatedChild": {"selector":"button[aria-label=\"编辑: DeskPilot闭环子值20260907A1-已更新\"]"},
+    "deleteUpdatedChild": {"selector":"button[aria-label=\"删除: DeskPilot闭环子值20260907A1-已更新\"]"},
+    "ownNameRow": {"selector":"table tbody tr.ant-table-row","text":{"contains":{"input":"label"}}}
+  },
+  "flows": {
+    "closed_loop": {
+      "flow_id": "xrain-picklist-closed-loop",
+      "revision": 2,
+      "timeout_ms": 600000,
+      "steps": [
+        {
+          "id": "ensure",
+          "label": "连接演示租户",
+          "timeout_ms": 45000,
+          "action": {"type":"ensure","auto_start":true,"profile_mode":"managed","url":{"input":"url"}},
+          "expect": ["authenticated"]
+        },
+        {
+          "id": "open_list",
+          "label": "打开选项集管理并确认专用编码不存在",
+          "timeout_ms": 45000,
+          "action": {"type":"navigate","url":{"input":"url"},"wait_until":"load","timeout_ms":25000},
+          "expect": ["absent"],
+          "requires": ["authenticated"]
+        },
+        {
+          "id": "new_set",
+          "label": "打开新建选项集表单",
+          "timeout_ms": 45000,
+          "action": {"type":"click","target":"newSet","timeout_ms":15000},
+          "expect": ["formReady"],
+          "consumes": ["open_list.absent"],
+          "requires": ["listReady"]
+        },
+        {
+          "id": "fill_code",
+          "label": "填写专用选项集编码",
+          "timeout_ms": 45000,
+          "action": {"type":"fill","target":"name","value":{"input":"code"},"timeout_ms":15000},
+          "expect": ["codeEntered"],
+          "consumes": ["new_set.formReady"]
+        },
+        {
+          "id": "fill_label",
+          "label": "填写选项集名称",
+          "timeout_ms": 45000,
+          "action": {"type":"fill","target":"label","value":{"input":"label"},"timeout_ms":15000},
+          "expect": ["labelEntered"],
+          "consumes": ["fill_code.codeEntered"]
+        },
+        {
+          "id": "fill_description",
+          "label": "填写测试说明",
+          "timeout_ms": 45000,
+          "action": {"type":"fill","target":"description","value":{"input":"description"},"timeout_ms":15000},
+          "expect": ["descriptionEntered"],
+          "consumes": ["fill_label.labelEntered"]
+        },
+        {
+          "id": "disable_initial",
+          "label": "将初始选项集设为停用",
+          "timeout_ms": 45000,
+          "action": {"type":"click","target":"enabled","timeout_ms":15000},
+          "expect": ["disabled"],
+          "requires": ["enabled"],
+          "consumes": ["fill_description.descriptionEntered"]
+        },
+        {
+          "id": "save_created",
+          "label": "保存新建选项集并确认列表结果",
+          "timeout_ms": 45000,
+          "action": {"type":"click","target":"save","timeout_ms":15000},
+          "expect": ["created"],
+          "consumes": ["fill_code.codeEntered","fill_label.labelEntered","fill_description.descriptionEntered","disable_initial.disabled"],
+          "releases": ["new_set.formReady","fill_code.codeEntered","fill_label.labelEntered","fill_description.descriptionEntered","disable_initial.disabled"]
+        },
+        {
+          "id": "leave_created",
+          "label": "离开选项集页面",
+          "timeout_ms": 45000,
+          "action": {"type":"navigate","url":{"input":"overviewUrl"},"wait_until":"load","timeout_ms":25000},
+          "expect": ["overviewReady"],
+          "consumes": ["save_created.created"],
+          "releases": ["save_created.created"]
+        },
+        {
+          "id": "reload_created",
+          "label": "重新加载选项集列表核对创建结果",
+          "timeout_ms": 45000,
+          "action": {"type":"navigate","url":{"input":"url"},"wait_until":"load","timeout_ms":25000},
+          "expect": ["created"],
+          "consumes": ["leave_created.overviewReady"],
+          "releases": ["leave_created.overviewReady"]
+        },
+        {
+          "id": "read_created",
+          "label": "打开专用记录核对全部已保存字段",
+          "timeout_ms": 45000,
+          "action": {"type":"click","target":"editOwn","timeout_ms":15000},
+          "expect": ["createdReadback"],
+          "consumes": ["reload_created.created"],
+          "releases": ["reload_created.created"]
+        },
+        {
+          "id": "update_label",
+          "label": "修改选项集名称",
+          "timeout_ms": 45000,
+          "action": {"type":"fill","target":"label","value":{"input":"updatedLabel"},"timeout_ms":15000},
+          "expect": ["newLabelEntered"],
+          "consumes": ["read_created.createdReadback"],
+          "releases": ["read_created.createdReadback"]
+        },
+        {
+          "id": "update_description",
+          "label": "修改说明",
+          "timeout_ms": 45000,
+          "action": {"type":"fill","target":"description","value":{"input":"updatedDescription"},"timeout_ms":15000},
+          "expect": ["newDescriptionEntered"],
+          "consumes": ["update_label.newLabelEntered"]
+        },
+        {
+          "id": "enable_updated",
+          "label": "将修改后的选项集启用",
+          "timeout_ms": 45000,
+          "action": {"type":"click","target":"enabled","timeout_ms":15000},
+          "expect": ["enabled"],
+          "requires": ["disabled"],
+          "consumes": ["update_description.newDescriptionEntered"]
+        },
+        {
+          "id": "save_updated",
+          "label": "保存修改并确认新名称",
+          "timeout_ms": 45000,
+          "action": {"type":"click","target":"save","timeout_ms":15000},
+          "expect": ["updated"],
+          "requires": ["codeEntered"],
+          "consumes": ["update_label.newLabelEntered","update_description.newDescriptionEntered","enable_updated.enabled"],
+          "releases": ["update_label.newLabelEntered","update_description.newDescriptionEntered","enable_updated.enabled"]
+        },
+        {
+          "id": "leave_updated",
+          "label": "离开页面以验证修改持久化",
+          "timeout_ms": 45000,
+          "action": {"type":"navigate","url":{"input":"overviewUrl"},"wait_until":"load","timeout_ms":25000},
+          "expect": ["overviewReady"],
+          "consumes": ["save_updated.updated"],
+          "releases": ["save_updated.updated"]
+        },
+        {
+          "id": "reload_updated",
+          "label": "重新加载修改后的选项集",
+          "timeout_ms": 45000,
+          "action": {"type":"navigate","url":{"input":"url"},"wait_until":"load","timeout_ms":25000},
+          "expect": ["updated"],
+          "consumes": ["leave_updated.overviewReady"],
+          "releases": ["leave_updated.overviewReady"]
+        },
+        {
+          "id": "read_updated",
+          "label": "重新打开并核对编码名称说明和启用状态",
+          "timeout_ms": 45000,
+          "action": {"type":"click","target":"editUpdated","timeout_ms":15000},
+          "expect": ["updatedReadback"],
+          "consumes": ["reload_updated.updated"],
+          "releases": ["reload_updated.updated"]
+        },
+        {
+          "id": "close_readback",
+          "label": "关闭回读表单保留已核实记录",
+          "timeout_ms": 45000,
+          "action": {"type":"click","target":"cancel","timeout_ms":15000},
+          "expect": ["updated"],
+          "consumes": ["read_updated.updatedReadback"],
+          "releases": ["read_updated.updatedReadback"]
+        },
+        {
+          "id": "open_parent_detail",
+          "label": "打开已核实的父选项集详情",
+          "timeout_ms": 45000,
+          "action": {"type":"click","target":"viewUpdated","timeout_ms":15000},
+          "expect": ["parentDetail"],
+          "consumes": ["close_readback.updated"],
+          "releases": ["close_readback.updated"]
+        },
+        {
+          "id": "open_items",
+          "label": "进入子选项值页并确认测试子值不存在",
+          "timeout_ms": 45000,
+          "action": {"type":"click","target":"itemsTab","timeout_ms":15000},
+          "expect": ["childAbsent"],
+          "consumes": ["open_parent_detail.parentDetail"],
+          "releases": ["open_parent_detail.parentDetail"]
+        },
+        {
+          "id": "new_child",
+          "label": "打开新建子选项值表单",
+          "timeout_ms": 45000,
+          "action": {"type":"click","target":"newItem","timeout_ms":15000},
+          "expect": ["childFormReady"],
+          "requires": ["itemsReady"],
+          "consumes": ["open_items.childAbsent"]
+        },
+        {
+          "id": "fill_child_code",
+          "label": "填写子值唯一编码",
+          "timeout_ms": 45000,
+          "action": {"type":"fill","target":"name","value":{"input":"childCode"},"timeout_ms":15000},
+          "expect": ["childCodeEntered"],
+          "consumes": ["new_child.childFormReady"]
+        },
+        {
+          "id": "fill_child_label",
+          "label": "填写子值名称",
+          "timeout_ms": 45000,
+          "action": {"type":"fill","target":"label","value":{"input":"childLabel"},"timeout_ms":15000},
+          "expect": ["childLabelEntered"],
+          "consumes": ["fill_child_code.childCodeEntered"]
+        },
+        {
+          "id": "fill_child_help",
+          "label": "填写子值说明",
+          "timeout_ms": 45000,
+          "action": {"type":"fill","target":"description","value":{"input":"childDescription"},"timeout_ms":15000},
+          "expect": ["childHelpEntered"],
+          "consumes": ["fill_child_label.childLabelEntered"]
+        },
+        {
+          "id": "fill_child_color",
+          "label": "配置子值显示颜色",
+          "timeout_ms": 45000,
+          "action": {"type":"fill","target":"color","value":{"input":"childColor"},"timeout_ms":15000},
+          "expect": ["childColorEntered"],
+          "consumes": ["fill_child_help.childHelpEntered"]
+        },
+        {
+          "id": "save_child",
+          "label": "保存子值并核对列表结果",
+          "timeout_ms": 45000,
+          "action": {"type":"click","target":"save","timeout_ms":15000},
+          "expect": ["childCreated"],
+          "requires": ["childEnabled"],
+          "consumes": ["fill_child_code.childCodeEntered","fill_child_label.childLabelEntered","fill_child_help.childHelpEntered","fill_child_color.childColorEntered"],
+          "releases": [
+            "open_items.childAbsent",
+            "new_child.childFormReady",
+            "fill_child_code.childCodeEntered",
+            "fill_child_label.childLabelEntered",
+            "fill_child_help.childHelpEntered",
+            "fill_child_color.childColorEntered"
+          ]
+        },
+        {
+          "id": "leave_child_created",
+          "label": "离开子值页面",
+          "timeout_ms": 45000,
+          "action": {"type":"navigate","url":{"input":"overviewUrl"},"wait_until":"load","timeout_ms":25000},
+          "expect": ["overviewReady"],
+          "consumes": ["save_child.childCreated"],
+          "releases": ["save_child.childCreated"]
+        },
+        {
+          "id": "list_for_child_readback",
+          "label": "重新加载父选项集列表",
+          "timeout_ms": 45000,
+          "action": {"type":"navigate","url":{"input":"url"},"wait_until":"load","timeout_ms":25000},
+          "expect": ["updated"],
+          "consumes": ["leave_child_created.overviewReady"],
+          "releases": ["leave_child_created.overviewReady"]
+        },
+        {
+          "id": "parent_for_child_readback",
+          "label": "重新确认父对象身份",
+          "timeout_ms": 45000,
+          "action": {"type":"click","target":"viewUpdated","timeout_ms":15000},
+          "expect": ["parentDetail"],
+          "consumes": ["list_for_child_readback.updated"],
+          "releases": ["list_for_child_readback.updated"]
+        },
+        {
+          "id": "items_for_child_readback",
+          "label": "重新加载子值列表",
+          "timeout_ms": 45000,
+          "action": {"type":"click","target":"itemsTab","timeout_ms":15000},
+          "expect": ["childCreated"],
+          "consumes": ["parent_for_child_readback.parentDetail"],
+          "releases": ["parent_for_child_readback.parentDetail"]
+        },
+        {
+          "id": "read_child_created",
+          "label": "打开子值核对已保存字段和颜色",
+          "timeout_ms": 45000,
+          "action": {"type":"click","target":"editChild","timeout_ms":15000},
+          "expect": ["childCreatedReadback"],
+          "consumes": ["items_for_child_readback.childCreated"],
+          "releases": ["items_for_child_readback.childCreated"]
+        },
+        {
+          "id": "update_child_label",
+          "label": "修改子值名称",
+          "timeout_ms": 45000,
+          "action": {"type":"fill","target":"label","value":{"input":"childUpdatedLabel"},"timeout_ms":15000},
+          "expect": ["childNewLabelEntered"],
+          "consumes": ["read_child_created.childCreatedReadback"],
+          "releases": ["read_child_created.childCreatedReadback"]
+        },
+        {
+          "id": "update_child_help",
+          "label": "修改子值说明",
+          "timeout_ms": 45000,
+          "action": {"type":"fill","target":"description","value":{"input":"childUpdatedDescription"},"timeout_ms":15000},
+          "expect": ["childNewHelpEntered"],
+          "consumes": ["update_child_label.childNewLabelEntered"]
+        },
+        {
+          "id": "update_child_color",
+          "label": "修改子值颜色",
+          "timeout_ms": 45000,
+          "action": {"type":"fill","target":"color","value":{"input":"childUpdatedColor"},"timeout_ms":15000},
+          "expect": ["childNewColorEntered"],
+          "consumes": ["update_child_help.childNewHelpEntered"]
+        },
+        {
+          "id": "disable_child",
+          "label": "将子值设为停用",
+          "timeout_ms": 45000,
+          "action": {"type":"click","target":"enabled","timeout_ms":15000},
+          "expect": ["childDisabled"],
+          "requires": ["childEnabled"],
+          "consumes": ["update_child_color.childNewColorEntered"]
+        },
+        {
+          "id": "save_child_updated",
+          "label": "保存子值修改",
+          "timeout_ms": 45000,
+          "action": {"type":"click","target":"save","timeout_ms":15000},
+          "expect": ["childUpdated"],
+          "requires": ["childCodeEntered"],
+          "consumes": [
+            "update_child_label.childNewLabelEntered",
+            "update_child_help.childNewHelpEntered",
+            "update_child_color.childNewColorEntered",
+            "disable_child.childDisabled"
+          ],
+          "releases": [
+            "update_child_label.childNewLabelEntered",
+            "update_child_help.childNewHelpEntered",
+            "update_child_color.childNewColorEntered",
+            "disable_child.childDisabled"
+          ]
+        },
+        {
+          "id": "leave_child_updated",
+          "label": "离开以验证子值修改持久化",
+          "timeout_ms": 45000,
+          "action": {"type":"navigate","url":{"input":"overviewUrl"},"wait_until":"load","timeout_ms":25000},
+          "expect": ["overviewReady"],
+          "consumes": ["save_child_updated.childUpdated"],
+          "releases": ["save_child_updated.childUpdated"]
+        },
+        {
+          "id": "list_for_child_updated",
+          "label": "重新加载父列表",
+          "timeout_ms": 45000,
+          "action": {"type":"navigate","url":{"input":"url"},"wait_until":"load","timeout_ms":25000},
+          "expect": ["updated"],
+          "consumes": ["leave_child_updated.overviewReady"],
+          "releases": ["leave_child_updated.overviewReady"]
+        },
+        {
+          "id": "parent_for_child_updated",
+          "label": "重新打开同一父选项集",
+          "timeout_ms": 45000,
+          "action": {"type":"click","target":"viewUpdated","timeout_ms":15000},
+          "expect": ["parentDetail"],
+          "consumes": ["list_for_child_updated.updated"],
+          "releases": ["list_for_child_updated.updated"]
+        },
+        {
+          "id": "items_for_child_updated",
+          "label": "重新读取修改后的子值",
+          "timeout_ms": 45000,
+          "action": {"type":"click","target":"itemsTab","timeout_ms":15000},
+          "expect": ["childUpdated"],
+          "consumes": ["parent_for_child_updated.parentDetail"],
+          "releases": ["parent_for_child_updated.parentDetail"]
+        },
+        {
+          "id": "read_child_updated",
+          "label": "核对修改后的子值字段颜色和停用状态",
+          "timeout_ms": 45000,
+          "action": {"type":"click","target":"editUpdatedChild","timeout_ms":15000},
+          "expect": ["childUpdatedReadback"],
+          "consumes": ["items_for_child_updated.childUpdated"],
+          "releases": ["items_for_child_updated.childUpdated"]
+        },
+        {
+          "id": "close_child_readback",
+          "label": "关闭子值回读表单",
+          "timeout_ms": 45000,
+          "action": {"type":"click","target":"cancel","timeout_ms":15000},
+          "expect": ["childUpdated"],
+          "consumes": ["read_child_updated.childUpdatedReadback"],
+          "releases": ["read_child_updated.childUpdatedReadback"]
+        },
+        {
+          "id": "request_child_delete",
+          "label": "请求删除本次子选项值",
+          "timeout_ms": 45000,
+          "action": {"type":"click","target":"deleteUpdatedChild","timeout_ms":15000},
+          "expect": ["childDeletePrompt"],
+          "consumes": ["close_child_readback.childUpdated"]
+        },
+        {
+          "id": "confirm_child_delete",
+          "label": "确认删除子值并核对结果",
+          "timeout_ms": 45000,
+          "action": {"type":"click","target":"confirmDelete","timeout_ms":15000},
+          "expect": ["childDeleted"],
+          "consumes": ["request_child_delete.childDeletePrompt","close_child_readback.childUpdated"],
+          "releases": ["request_child_delete.childDeletePrompt","close_child_readback.childUpdated"]
+        },
+        {
+          "id": "leave_child_deleted",
+          "label": "离开子值清理页",
+          "timeout_ms": 45000,
+          "action": {"type":"navigate","url":{"input":"overviewUrl"},"wait_until":"load","timeout_ms":25000},
+          "expect": ["overviewReady"],
+          "consumes": ["confirm_child_delete.childDeleted"],
+          "releases": ["confirm_child_delete.childDeleted"]
+        },
+        {
+          "id": "list_for_child_deleted",
+          "label": "重新加载父列表验证清理",
+          "timeout_ms": 45000,
+          "action": {"type":"navigate","url":{"input":"url"},"wait_until":"load","timeout_ms":25000},
+          "expect": ["updated"],
+          "consumes": ["leave_child_deleted.overviewReady"],
+          "releases": ["leave_child_deleted.overviewReady"]
+        },
+        {
+          "id": "parent_for_child_deleted",
+          "label": "重新确认待清理父对象身份",
+          "timeout_ms": 45000,
+          "action": {"type":"click","target":"viewUpdated","timeout_ms":15000},
+          "expect": ["parentDetail"],
+          "consumes": ["list_for_child_deleted.updated"],
+          "releases": ["list_for_child_deleted.updated"]
+        },
+        {
+          "id": "items_for_child_deleted",
+          "label": "重新加载确认子值已删除",
+          "timeout_ms": 45000,
+          "action": {"type":"click","target":"itemsTab","timeout_ms":15000},
+          "expect": ["childAbsent"],
+          "consumes": ["parent_for_child_deleted.parentDetail"],
+          "releases": ["parent_for_child_deleted.parentDetail"]
+        },
+        {
+          "id": "return_after_child_cleanup",
+          "label": "子值清理确认后返回父列表",
+          "timeout_ms": 45000,
+          "action": {"type":"navigate","url":{"input":"url"},"wait_until":"load","timeout_ms":25000},
+          "expect": ["updated"],
+          "consumes": ["items_for_child_deleted.childAbsent"],
+          "releases": ["items_for_child_deleted.childAbsent"]
+        },
+        {
+          "id": "request_delete",
+          "label": "请求删除本次专用选项集",
+          "timeout_ms": 45000,
+          "action": {"type":"click","target":"deleteUpdated","timeout_ms":15000},
+          "expect": ["deletePrompt"],
+          "consumes": ["return_after_child_cleanup.updated"]
+        },
+        {
+          "id": "cancel_delete",
+          "label": "取消首次删除并核对记录仍在",
+          "timeout_ms": 45000,
+          "action": {"type":"click","target":"cancelDelete","timeout_ms":15000},
+          "expect": ["deleteCancelled"],
+          "consumes": ["request_delete.deletePrompt"],
+          "releases": ["request_delete.deletePrompt"]
+        },
+        {
+          "id": "request_delete_again",
+          "label": "再次请求删除并核对确认对象",
+          "timeout_ms": 45000,
+          "action": {"type":"click","target":"deleteUpdated","timeout_ms":15000},
+          "expect": ["deletePrompt"],
+          "consumes": ["cancel_delete.deleteCancelled"],
+          "releases": ["cancel_delete.deleteCancelled"]
+        },
+        {
+          "id": "confirm_delete",
+          "label": "确认删除本次选项集",
+          "timeout_ms": 45000,
+          "action": {"type":"click","target":"confirmDelete","timeout_ms":15000},
+          "expect": ["deleted"],
+          "consumes": ["request_delete_again.deletePrompt","return_after_child_cleanup.updated"],
+          "releases": ["request_delete_again.deletePrompt","return_after_child_cleanup.updated"]
+        },
+        {
+          "id": "leave_deleted",
+          "label": "离开清理后的列表",
+          "timeout_ms": 45000,
+          "action": {"type":"navigate","url":{"input":"overviewUrl"},"wait_until":"load","timeout_ms":25000},
+          "expect": ["overviewReady"],
+          "consumes": ["confirm_delete.deleted"],
+          "releases": ["confirm_delete.deleted"]
+        },
+        {
+          "id": "reload_deleted",
+          "label": "重新加载并确认专用记录已清理",
+          "timeout_ms": 45000,
+          "action": {"type":"navigate","url":{"input":"url"},"wait_until":"load","timeout_ms":25000},
+          "expect": ["deleted"],
+          "consumes": ["leave_deleted.overviewReady"],
+          "releases": ["leave_deleted.overviewReady"]
+        }
+      ],
+      "checks": {
+        "authenticated": {"predicate":{"type":"page","text":{"contains":["demo-admin","XRain Demo"],"not_contains":"欢迎回来"}},"timeout_ms":12000,"poll_ms":200,"stable_ms":200},
+        "absent": {
+          "predicate": {
+            "type": "all",
+            "conditions": [
+              {"type":"page","url":{"equals":{"input":"url"}}},
+              {"type":"element","target":"ownRow","count":{"equals":0}},
+              {"type":"element","target":"builtinReferenceRow","count":{"equals":1}},
+              {"type":"element","target":"loading","count":{"equals":0}},
+              {"type":"element","target":"ownNameRow","count":{"equals":0}}
+            ]
+          },
+          "timeout_ms": 12000,
+          "poll_ms": 200,
+          "stable_ms": 200
+        },
+        "formReady": {
+          "predicate": {
+            "type": "all",
+            "conditions": [
+              {"type":"page","url":{"equals":{"input":"url"}}},
+              {"type":"element","target":"dialog","count":{"equals":1}},
+              {"type":"element","target":"name","count":{"equals":1},"visible":true},
+              {"type":"element","target":"label","count":{"equals":1},"visible":true,"editable":true},
+              {"type":"element","target":"description","count":{"equals":1},"visible":true,"editable":true}
+            ]
+          },
+          "timeout_ms": 12000,
+          "poll_ms": 200,
+          "stable_ms": 200
+        },
+        "listReady": {
+          "predicate": {
+            "type": "all",
+            "conditions": [
+              {"type":"page","url":{"equals":{"input":"url"}}},
+              {"type":"element","target":"newSet","count":{"equals":1},"visible":true,"enabled":true},
+              {"type":"element","target":"builtinReferenceRow","count":{"equals":1}},
+              {"type":"element","target":"loading","count":{"equals":0}}
+            ]
+          },
+          "timeout_ms": 12000,
+          "poll_ms": 200,
+          "stable_ms": 200
+        },
+        "codeEntered": {
+          "predicate": {
+            "type": "all",
+            "conditions": [{"type":"page","url":{"equals":{"input":"url"}}},{"type":"element","target":"name","count":{"equals":1},"value":{"equals":{"input":"code"}}}]
+          },
+          "timeout_ms": 12000,
+          "poll_ms": 200,
+          "stable_ms": 200
+        },
+        "labelEntered": {
+          "predicate": {
+            "type": "all",
+            "conditions": [{"type":"page","url":{"equals":{"input":"url"}}},{"type":"element","target":"label","count":{"equals":1},"value":{"equals":{"input":"label"}}}]
+          },
+          "timeout_ms": 12000,
+          "poll_ms": 200,
+          "stable_ms": 200
+        },
+        "descriptionEntered": {
+          "predicate": {
+            "type": "all",
+            "conditions": [
+              {"type":"page","url":{"equals":{"input":"url"}}},
+              {"type":"element","target":"description","count":{"equals":1},"value":{"equals":{"input":"description"}}}
+            ]
+          },
+          "timeout_ms": 12000,
+          "poll_ms": 200,
+          "stable_ms": 200
+        },
+        "disabled": {
+          "predicate": {
+            "type": "all",
+            "conditions": [
+              {"type":"page","url":{"equals":{"input":"url"}}},
+              {"type":"element","target":"enabled","count":{"equals":1},"attribute":{"name":"class","not_contains":"ant-switch-checked"}}
+            ]
+          },
+          "timeout_ms": 12000,
+          "poll_ms": 200,
+          "stable_ms": 200
+        },
+        "enabled": {
+          "predicate": {
+            "type": "all",
+            "conditions": [
+              {"type":"page","url":{"equals":{"input":"url"}}},
+              {"type":"element","target":"enabled","count":{"equals":1},"attribute":{"name":"class","contains":"ant-switch-checked"}}
+            ]
+          },
+          "timeout_ms": 12000,
+          "poll_ms": 200,
+          "stable_ms": 200
+        },
+        "created": {
+          "predicate": {
+            "type": "all",
+            "conditions": [
+              {"type":"page","url":{"equals":{"input":"url"}}},
+              {"type":"element","target":"dialog","count":{"equals":0}},
+              {"type":"element","target":"ownRow","count":{"equals":1},"text":{"contains":{"input":"label"}}},
+              {"type":"element","target":"builtinReferenceRow","count":{"equals":1}},
+              {"type":"element","target":"loading","count":{"equals":0}}
+            ]
+          },
+          "timeout_ms": 12000,
+          "poll_ms": 200,
+          "stable_ms": 200
+        },
+        "overviewReady": {
+          "predicate": {"type":"all","conditions":[{"type":"page","url":{"equals":{"input":"overviewUrl"}}},{"type":"page","text":{"contains":"租户总览"}}]},
+          "timeout_ms": 12000,
+          "poll_ms": 200,
+          "stable_ms": 200
+        },
+        "createdReadback": {
+          "predicate": {
+            "type": "all",
+            "conditions": [
+              {"type":"page","url":{"equals":{"input":"url"}}},
+              {"type":"element","target":"name","count":{"equals":1},"value":{"equals":{"input":"code"}}},
+              {"type":"element","target":"label","count":{"equals":1},"value":{"equals":{"input":"label"}}},
+              {"type":"element","target":"description","count":{"equals":1},"value":{"equals":{"input":"description"}}},
+              {"type":"element","target":"enabled","count":{"equals":1},"attribute":{"name":"class","not_contains":"ant-switch-checked"}}
+            ]
+          },
+          "timeout_ms": 12000,
+          "poll_ms": 200,
+          "stable_ms": 200
+        },
+        "newLabelEntered": {
+          "predicate": {
+            "type": "all",
+            "conditions": [
+              {"type":"page","url":{"equals":{"input":"url"}}},
+              {"type":"element","target":"label","count":{"equals":1},"value":{"equals":{"input":"updatedLabel"}}}
+            ]
+          },
+          "timeout_ms": 12000,
+          "poll_ms": 200,
+          "stable_ms": 200
+        },
+        "newDescriptionEntered": {
+          "predicate": {
+            "type": "all",
+            "conditions": [
+              {"type":"page","url":{"equals":{"input":"url"}}},
+              {"type":"element","target":"description","count":{"equals":1},"value":{"equals":{"input":"updatedDescription"}}}
+            ]
+          },
+          "timeout_ms": 12000,
+          "poll_ms": 200,
+          "stable_ms": 200
+        },
+        "updated": {
+          "predicate": {
+            "type": "all",
+            "conditions": [
+              {"type":"page","url":{"equals":{"input":"url"}}},
+              {"type":"element","target":"dialog","count":{"equals":0}},
+              {"type":"element","target":"ownRow","count":{"equals":1},"text":{"contains":{"input":"updatedLabel"}}},
+              {"type":"element","target":"builtinReferenceRow","count":{"equals":1}},
+              {"type":"element","target":"loading","count":{"equals":0}}
+            ]
+          },
+          "timeout_ms": 12000,
+          "poll_ms": 200,
+          "stable_ms": 200
+        },
+        "updatedReadback": {
+          "predicate": {
+            "type": "all",
+            "conditions": [
+              {"type":"page","url":{"equals":{"input":"url"}}},
+              {"type":"element","target":"name","count":{"equals":1},"value":{"equals":{"input":"code"}}},
+              {"type":"element","target":"label","count":{"equals":1},"value":{"equals":{"input":"updatedLabel"}}},
+              {"type":"element","target":"description","count":{"equals":1},"value":{"equals":{"input":"updatedDescription"}}},
+              {"type":"element","target":"enabled","count":{"equals":1},"attribute":{"name":"class","contains":"ant-switch-checked"}}
+            ]
+          },
+          "timeout_ms": 12000,
+          "poll_ms": 200,
+          "stable_ms": 200
+        },
+        "deletePrompt": {
+          "predicate": {
+            "type": "all",
+            "conditions": [
+              {"type":"page","url":{"equals":{"input":"url"}}},
+              {"type":"element","target":"confirmation","count":{"equals":1},"text":{"contains":{"input":"updatedLabel"}}},
+              {"type":"element","target":"confirmDelete","count":{"equals":1},"visible":true,"enabled":true}
+            ]
+          },
+          "timeout_ms": 12000,
+          "poll_ms": 200,
+          "stable_ms": 200
+        },
+        "deleteCancelled": {
+          "predicate": {
+            "type": "all",
+            "conditions": [
+              {"type":"page","url":{"equals":{"input":"url"}}},
+              {"type":"element","target":"confirmation","count":{"equals":0}},
+              {"type":"element","target":"ownRow","count":{"equals":1},"text":{"contains":{"input":"updatedLabel"}}},
+              {"type":"element","target":"builtinReferenceRow","count":{"equals":1}},
+              {"type":"element","target":"loading","count":{"equals":0}}
+            ]
+          },
+          "timeout_ms": 12000,
+          "poll_ms": 200,
+          "stable_ms": 200
+        },
+        "deleted": {
+          "predicate": {
+            "type": "all",
+            "conditions": [
+              {"type":"page","url":{"equals":{"input":"url"}}},
+              {"type":"element","target":"ownRow","count":{"equals":0}},
+              {"type":"element","target":"confirmation","count":{"equals":0}},
+              {"type":"element","target":"dialog","count":{"equals":0}},
+              {"type":"element","target":"builtinReferenceRow","count":{"equals":1}},
+              {"type":"element","target":"loading","count":{"equals":0}},
+              {"type":"element","target":"ownNameRow","count":{"equals":0}}
+            ]
+          },
+          "timeout_ms": 12000,
+          "poll_ms": 200,
+          "stable_ms": 200
+        },
+        "parentDetail": {
+          "predicate": {
+            "type": "all",
+            "conditions": [
+              {"type":"page","url":{"contains":{"input":"detailBase"}},"text":{"contains":{"input":"updatedLabel"}}},
+              {"type":"page","text":{"contains":{"input":"code"}}},
+              {"type":"page","text":{"contains":{"input":"updatedDescription"}}},
+              {"type":"element","target":"loading","count":{"equals":0}}
+            ]
+          },
+          "timeout_ms": 12000,
+          "poll_ms": 200,
+          "stable_ms": 200
+        },
+        "itemsReady": {
+          "predicate": {
+            "type": "all",
+            "conditions": [
+              {"type":"page","url":{"contains":{"input":"detailBase"}},"text":{"contains":{"input":"updatedLabel"}}},
+              {"type":"element","target":"itemsTab","count":{"equals":1},"attribute":{"name":"aria-selected","equals":"true"}},
+              {"type":"element","target":"newItem","count":{"equals":1},"visible":true,"enabled":true},
+              {"type":"element","target":"loading","count":{"equals":0}}
+            ]
+          },
+          "timeout_ms": 12000,
+          "poll_ms": 200,
+          "stable_ms": 200
+        },
+        "childAbsent": {
+          "predicate": {
+            "type": "all",
+            "conditions": [
+              {"type":"page","url":{"contains":{"input":"detailBase"}},"text":{"contains":{"input":"updatedLabel"}}},
+              {"type":"element","target":"ownChild","count":{"equals":0}},
+              {"type":"element","target":"itemsTab","count":{"equals":1},"attribute":{"name":"aria-selected","equals":"true"}},
+              {"type":"element","target":"loading","count":{"equals":0}}
+            ]
+          },
+          "timeout_ms": 12000,
+          "poll_ms": 200,
+          "stable_ms": 200
+        },
+        "childFormReady": {
+          "predicate": {
+            "type": "all",
+            "conditions": [
+              {"type":"page","url":{"contains":{"input":"detailBase"}},"text":{"contains":{"input":"updatedLabel"}}},
+              {"type":"element","target":"dialog","count":{"equals":1}},
+              {"type":"element","target":"name","count":{"equals":1},"visible":true,"editable":true},
+              {"type":"element","target":"label","count":{"equals":1},"visible":true,"editable":true},
+              {"type":"element","target":"description","count":{"equals":1},"visible":true,"editable":true},
+              {"type":"element","target":"color","count":{"equals":1},"visible":true,"editable":true}
+            ]
+          },
+          "timeout_ms": 12000,
+          "poll_ms": 200,
+          "stable_ms": 200
+        },
+        "childCodeEntered": {
+          "predicate": {
+            "type": "all",
+            "conditions": [
+              {"type":"page","url":{"contains":{"input":"detailBase"}},"text":{"contains":{"input":"updatedLabel"}}},
+              {"type":"element","target":"name","count":{"equals":1},"value":{"equals":{"input":"childCode"}}}
+            ]
+          },
+          "timeout_ms": 12000,
+          "poll_ms": 200,
+          "stable_ms": 200
+        },
+        "childLabelEntered": {
+          "predicate": {
+            "type": "all",
+            "conditions": [
+              {"type":"page","url":{"contains":{"input":"detailBase"}},"text":{"contains":{"input":"updatedLabel"}}},
+              {"type":"element","target":"label","count":{"equals":1},"value":{"equals":{"input":"childLabel"}}}
+            ]
+          },
+          "timeout_ms": 12000,
+          "poll_ms": 200,
+          "stable_ms": 200
+        },
+        "childHelpEntered": {
+          "predicate": {
+            "type": "all",
+            "conditions": [
+              {"type":"page","url":{"contains":{"input":"detailBase"}},"text":{"contains":{"input":"updatedLabel"}}},
+              {"type":"element","target":"description","count":{"equals":1},"value":{"equals":{"input":"childDescription"}}}
+            ]
+          },
+          "timeout_ms": 12000,
+          "poll_ms": 200,
+          "stable_ms": 200
+        },
+        "childColorEntered": {
+          "predicate": {
+            "type": "all",
+            "conditions": [
+              {"type":"page","url":{"contains":{"input":"detailBase"}},"text":{"contains":{"input":"updatedLabel"}}},
+              {"type":"element","target":"color","count":{"equals":1},"value":{"equals":{"input":"childColor"}}}
+            ]
+          },
+          "timeout_ms": 12000,
+          "poll_ms": 200,
+          "stable_ms": 200
+        },
+        "childNewLabelEntered": {
+          "predicate": {
+            "type": "all",
+            "conditions": [
+              {"type":"page","url":{"contains":{"input":"detailBase"}},"text":{"contains":{"input":"updatedLabel"}}},
+              {"type":"element","target":"label","count":{"equals":1},"value":{"equals":{"input":"childUpdatedLabel"}}}
+            ]
+          },
+          "timeout_ms": 12000,
+          "poll_ms": 200,
+          "stable_ms": 200
+        },
+        "childNewHelpEntered": {
+          "predicate": {
+            "type": "all",
+            "conditions": [
+              {"type":"page","url":{"contains":{"input":"detailBase"}},"text":{"contains":{"input":"updatedLabel"}}},
+              {"type":"element","target":"description","count":{"equals":1},"value":{"equals":{"input":"childUpdatedDescription"}}}
+            ]
+          },
+          "timeout_ms": 12000,
+          "poll_ms": 200,
+          "stable_ms": 200
+        },
+        "childNewColorEntered": {
+          "predicate": {
+            "type": "all",
+            "conditions": [
+              {"type":"page","url":{"contains":{"input":"detailBase"}},"text":{"contains":{"input":"updatedLabel"}}},
+              {"type":"element","target":"color","count":{"equals":1},"value":{"equals":{"input":"childUpdatedColor"}}}
+            ]
+          },
+          "timeout_ms": 12000,
+          "poll_ms": 200,
+          "stable_ms": 200
+        },
+        "childEnabled": {
+          "predicate": {
+            "type": "all",
+            "conditions": [
+              {"type":"page","url":{"contains":{"input":"detailBase"}},"text":{"contains":{"input":"updatedLabel"}}},
+              {"type":"element","target":"enabled","count":{"equals":1},"attribute":{"name":"class","contains":"ant-switch-checked"}}
+            ]
+          },
+          "timeout_ms": 12000,
+          "poll_ms": 200,
+          "stable_ms": 200
+        },
+        "childDisabled": {
+          "predicate": {
+            "type": "all",
+            "conditions": [
+              {"type":"page","url":{"contains":{"input":"detailBase"}},"text":{"contains":{"input":"updatedLabel"}}},
+              {"type":"element","target":"enabled","count":{"equals":1},"attribute":{"name":"class","not_contains":"ant-switch-checked"}}
+            ]
+          },
+          "timeout_ms": 12000,
+          "poll_ms": 200,
+          "stable_ms": 200
+        },
+        "childCreated": {
+          "predicate": {
+            "type": "all",
+            "conditions": [
+              {"type":"page","url":{"contains":{"input":"detailBase"}},"text":{"contains":{"input":"updatedLabel"}}},
+              {"type":"element","target":"ownChild","count":{"equals":1},"text":{"contains":{"input":"childLabel"}}},
+              {"type":"element","target":"dialog","count":{"equals":0}},
+              {"type":"element","target":"loading","count":{"equals":0}}
+            ]
+          },
+          "timeout_ms": 12000,
+          "poll_ms": 200,
+          "stable_ms": 200
+        },
+        "childCreatedReadback": {
+          "predicate": {
+            "type": "all",
+            "conditions": [
+              {"type":"page","url":{"contains":{"input":"detailBase"}},"text":{"contains":{"input":"updatedLabel"}}},
+              {"type":"element","target":"name","count":{"equals":1},"value":{"equals":{"input":"childCode"}}},
+              {"type":"element","target":"label","count":{"equals":1},"value":{"equals":{"input":"childLabel"}}},
+              {"type":"element","target":"description","count":{"equals":1},"value":{"equals":{"input":"childDescription"}}},
+              {"type":"element","target":"color","count":{"equals":1},"value":{"equals":{"input":"childColor"}}},
+              {"type":"element","target":"enabled","count":{"equals":1},"attribute":{"name":"class","contains":"ant-switch-checked"}}
+            ]
+          },
+          "timeout_ms": 12000,
+          "poll_ms": 200,
+          "stable_ms": 200
+        },
+        "childUpdated": {
+          "predicate": {
+            "type": "all",
+            "conditions": [
+              {"type":"page","url":{"contains":{"input":"detailBase"}},"text":{"contains":{"input":"updatedLabel"}}},
+              {"type":"element","target":"ownChild","count":{"equals":1},"text":{"contains":{"input":"childUpdatedLabel"}}},
+              {"type":"element","target":"dialog","count":{"equals":0}},
+              {"type":"element","target":"loading","count":{"equals":0}}
+            ]
+          },
+          "timeout_ms": 12000,
+          "poll_ms": 200,
+          "stable_ms": 200
+        },
+        "childUpdatedReadback": {
+          "predicate": {
+            "type": "all",
+            "conditions": [
+              {"type":"page","url":{"contains":{"input":"detailBase"}},"text":{"contains":{"input":"updatedLabel"}}},
+              {"type":"element","target":"name","count":{"equals":1},"value":{"equals":{"input":"childCode"}}},
+              {"type":"element","target":"label","count":{"equals":1},"value":{"equals":{"input":"childUpdatedLabel"}}},
+              {"type":"element","target":"description","count":{"equals":1},"value":{"equals":{"input":"childUpdatedDescription"}}},
+              {"type":"element","target":"color","count":{"equals":1},"value":{"equals":{"input":"childUpdatedColor"}}},
+              {"type":"element","target":"enabled","count":{"equals":1},"attribute":{"name":"class","not_contains":"ant-switch-checked"}}
+            ]
+          },
+          "timeout_ms": 12000,
+          "poll_ms": 200,
+          "stable_ms": 200
+        },
+        "childDeletePrompt": {
+          "predicate": {
+            "type": "all",
+            "conditions": [
+              {"type":"page","url":{"contains":{"input":"detailBase"}},"text":{"contains":{"input":"updatedLabel"}}},
+              {"type":"element","target":"confirmation","count":{"equals":1},"text":{"contains":{"input":"childUpdatedLabel"}}},
+              {"type":"element","target":"confirmDelete","count":{"equals":1},"visible":true,"enabled":true}
+            ]
+          },
+          "timeout_ms": 12000,
+          "poll_ms": 200,
+          "stable_ms": 200
+        },
+        "childDeleted": {
+          "predicate": {
+            "type": "all",
+            "conditions": [
+              {"type":"page","url":{"contains":{"input":"detailBase"}},"text":{"contains":{"input":"updatedLabel"}}},
+              {"type":"element","target":"ownChild","count":{"equals":0}},
+              {"type":"element","target":"dialog","count":{"equals":0}},
+              {"type":"element","target":"confirmation","count":{"equals":0}},
+              {"type":"element","target":"loading","count":{"equals":0}}
+            ]
+          },
+          "timeout_ms": 12000,
+          "poll_ms": 200,
+          "stable_ms": 200
+        }
+      },
+      "final_checks": ["reload_deleted.deleted"]
+    },
+    "probe": {
+      "flow_id": "xrain-picklist-prewrite-handoff",
+      "revision": 2,
+      "timeout_ms": 600000,
+      "steps": [
+        {
+          "id": "ensure",
+          "label": "连接演示租户",
+          "timeout_ms": 45000,
+          "action": {"type":"ensure","auto_start":true,"profile_mode":"managed","url":{"input":"url"}},
+          "expect": ["authenticated"]
+        },
+        {
+          "id": "open_list",
+          "label": "打开选项集管理并确认专用编码不存在",
+          "timeout_ms": 45000,
+          "action": {"type":"navigate","url":{"input":"url"},"wait_until":"load","timeout_ms":25000},
+          "expect": ["absent"],
+          "requires": ["authenticated"]
+        },
+        {
+          "id": "new_set",
+          "label": "打开新建选项集表单",
+          "timeout_ms": 45000,
+          "action": {"type":"click","target":"newSet","timeout_ms":15000},
+          "expect": ["formReady"],
+          "consumes": ["open_list.absent"],
+          "requires": ["listReady"]
+        },
+        {
+          "id": "fill_code",
+          "label": "填写专用选项集编码",
+          "timeout_ms": 45000,
+          "action": {"type":"fill","target":"name","value":{"input":"code"},"timeout_ms":15000},
+          "expect": ["codeEntered"],
+          "consumes": ["new_set.formReady"]
+        },
+        {
+          "id": "fill_label",
+          "label": "填写选项集名称",
+          "timeout_ms": 45000,
+          "action": {"type":"fill","target":"label","value":{"input":"label"},"timeout_ms":15000},
+          "expect": ["labelEntered"],
+          "consumes": ["fill_code.codeEntered"]
+        },
+        {
+          "id": "fill_description",
+          "label": "填写测试说明",
+          "timeout_ms": 45000,
+          "action": {"type":"fill","target":"description","value":{"input":"description"},"timeout_ms":15000},
+          "expect": ["descriptionEntered"],
+          "consumes": ["fill_label.labelEntered"]
+        },
+        {
+          "id": "disable_initial",
+          "label": "将初始选项集设为停用",
+          "timeout_ms": 45000,
+          "action": {"type":"click","target":"enabled","timeout_ms":15000},
+          "expect": ["disabled"],
+          "requires": ["enabled"],
+          "consumes": ["fill_description.descriptionEntered"]
+        },
+        {
+          "id": "inject_unsaved_code",
+          "label": "负向检查：变更尚未保存的编码",
+          "timeout_ms": 30000,
+          "action": {"type":"fill","target":"name","value":{"input":"injectedCode"},"timeout_ms":15000},
+          "expect": ["injectedCode"]
+        },
+        {
+          "id": "save_created",
+          "label": "保存新建选项集并确认列表结果",
+          "timeout_ms": 45000,
+          "action": {"type":"click","target":"save","timeout_ms":15000},
+          "expect": ["created"],
+          "consumes": ["fill_code.codeEntered","fill_label.labelEntered","fill_description.descriptionEntered","disable_initial.disabled"],
+          "releases": ["new_set.formReady","fill_code.codeEntered","fill_label.labelEntered","fill_description.descriptionEntered","disable_initial.disabled"]
+        }
+      ],
+      "checks": {
+        "authenticated": {"predicate":{"type":"page","text":{"contains":["demo-admin","XRain Demo"],"not_contains":"欢迎回来"}},"timeout_ms":12000,"poll_ms":200,"stable_ms":200},
+        "absent": {
+          "predicate": {
+            "type": "all",
+            "conditions": [
+              {"type":"page","url":{"equals":{"input":"url"}}},
+              {"type":"element","target":"ownRow","count":{"equals":0}},
+              {"type":"element","target":"builtinReferenceRow","count":{"equals":1}},
+              {"type":"element","target":"loading","count":{"equals":0}},
+              {"type":"element","target":"ownNameRow","count":{"equals":0}}
+            ]
+          },
+          "timeout_ms": 12000,
+          "poll_ms": 200,
+          "stable_ms": 200
+        },
+        "formReady": {
+          "predicate": {
+            "type": "all",
+            "conditions": [
+              {"type":"page","url":{"equals":{"input":"url"}}},
+              {"type":"element","target":"dialog","count":{"equals":1}},
+              {"type":"element","target":"name","count":{"equals":1},"visible":true},
+              {"type":"element","target":"label","count":{"equals":1},"visible":true,"editable":true},
+              {"type":"element","target":"description","count":{"equals":1},"visible":true,"editable":true}
+            ]
+          },
+          "timeout_ms": 12000,
+          "poll_ms": 200,
+          "stable_ms": 200
+        },
+        "listReady": {
+          "predicate": {
+            "type": "all",
+            "conditions": [
+              {"type":"page","url":{"equals":{"input":"url"}}},
+              {"type":"element","target":"newSet","count":{"equals":1},"visible":true,"enabled":true},
+              {"type":"element","target":"builtinReferenceRow","count":{"equals":1}},
+              {"type":"element","target":"loading","count":{"equals":0}}
+            ]
+          },
+          "timeout_ms": 12000,
+          "poll_ms": 200,
+          "stable_ms": 200
+        },
+        "codeEntered": {
+          "predicate": {
+            "type": "all",
+            "conditions": [{"type":"page","url":{"equals":{"input":"url"}}},{"type":"element","target":"name","count":{"equals":1},"value":{"equals":{"input":"code"}}}]
+          },
+          "timeout_ms": 1500,
+          "poll_ms": 200,
+          "stable_ms": 200
+        },
+        "labelEntered": {
+          "predicate": {
+            "type": "all",
+            "conditions": [{"type":"page","url":{"equals":{"input":"url"}}},{"type":"element","target":"label","count":{"equals":1},"value":{"equals":{"input":"label"}}}]
+          },
+          "timeout_ms": 12000,
+          "poll_ms": 200,
+          "stable_ms": 200
+        },
+        "descriptionEntered": {
+          "predicate": {
+            "type": "all",
+            "conditions": [
+              {"type":"page","url":{"equals":{"input":"url"}}},
+              {"type":"element","target":"description","count":{"equals":1},"value":{"equals":{"input":"description"}}}
+            ]
+          },
+          "timeout_ms": 12000,
+          "poll_ms": 200,
+          "stable_ms": 200
+        },
+        "disabled": {
+          "predicate": {
+            "type": "all",
+            "conditions": [
+              {"type":"page","url":{"equals":{"input":"url"}}},
+              {"type":"element","target":"enabled","count":{"equals":1},"attribute":{"name":"class","not_contains":"ant-switch-checked"}}
+            ]
+          },
+          "timeout_ms": 12000,
+          "poll_ms": 200,
+          "stable_ms": 200
+        },
+        "enabled": {
+          "predicate": {
+            "type": "all",
+            "conditions": [
+              {"type":"page","url":{"equals":{"input":"url"}}},
+              {"type":"element","target":"enabled","count":{"equals":1},"attribute":{"name":"class","contains":"ant-switch-checked"}}
+            ]
+          },
+          "timeout_ms": 12000,
+          "poll_ms": 200,
+          "stable_ms": 200
+        },
+        "injectedCode": {
+          "predicate": {
+            "type": "all",
+            "conditions": [
+              {"type":"page","url":{"equals":{"input":"url"}}},
+              {"type":"element","target":"name","count":{"equals":1},"value":{"equals":{"input":"injectedCode"}}}
+            ]
+          },
+          "timeout_ms": 12000,
+          "poll_ms": 200,
+          "stable_ms": 200
+        },
+        "created": {
+          "predicate": {
+            "type": "all",
+            "conditions": [
+              {"type":"page","url":{"equals":{"input":"url"}}},
+              {"type":"element","target":"dialog","count":{"equals":0}},
+              {"type":"element","target":"ownRow","count":{"equals":1},"text":{"contains":{"input":"label"}}},
+              {"type":"element","target":"builtinReferenceRow","count":{"equals":1}},
+              {"type":"element","target":"loading","count":{"equals":0}}
+            ]
+          },
+          "timeout_ms": 12000,
+          "poll_ms": 200,
+          "stable_ms": 200
+        }
+      },
+      "final_checks": ["save_created.created"]
+    }
+  }
+}

@@ -1,0 +1,284 @@
+{
+  "schema_version": 1,
+  "scenario_id": "xrain",
+  "inputs": {
+    "url": "https://lower-code.atlas-xrain.com/overview",
+    "viewsUrl": "https://lower-code.atlas-xrain.com/views",
+    "entityDesignUrl": "https://lower-code.atlas-xrain.com/entity-design",
+    "emailEntityUrl": "https://lower-code.atlas-xrain.com/entity-design/entities/infra_email_message",
+    "searchTerm": "Email",
+    "injectedTerm": "Feishu"
+  },
+  "targets": {
+    "search": { "selector": "input:not([type=\"search\"])" },
+    "table": { "selector": "table tbody" },
+    "emailObject": { "selector": "button.prototypeViewItem", "text": { "contains": "infra_email_message" } },
+    "fieldsTab": { "selector": "[data-node-key=\"fields\"] [role=\"tab\"]" }
+  },
+  "flows": {
+    "simple": {
+      "flow_id": "xrain-overview",
+      "revision": 3,
+      "timeout_ms": 180000,
+      "checks": {
+        "authenticated": {
+          "predicate": { "type": "page", "text": { "contains": ["demo-admin", "XRain Demo"], "not_contains": "欢迎回来" } },
+          "timeout_ms": 15000,
+          "poll_ms": 200,
+          "stable_ms": 200
+        },
+        "overviewReady": {
+          "predicate": { "type": "page", "url": { "equals": { "input": "url" } }, "text": { "contains": ["租户总览", "成员概况", "业务对象"] } },
+          "timeout_ms": 15000,
+          "poll_ms": 200,
+          "stable_ms": 200
+        }
+      },
+      "steps": [
+        {
+          "id": "ensure",
+          "label": "连接已登录的 XRain 工作区",
+          "timeout_ms": 45000,
+          "action": { "type": "ensure", "auto_start": true, "profile_mode": "managed", "url": { "input": "url" } },
+          "expect": ["authenticated"]
+        },
+        {
+          "id": "overview",
+          "label": "打开 XRain 租户总览",
+          "timeout_ms": 30000,
+          "requires": ["authenticated"],
+          "action": { "type": "navigate", "url": { "input": "url" }, "wait_until": "load", "timeout_ms": 20000 },
+          "expect": ["overviewReady"]
+        }
+      ],
+      "final_checks": ["overview.overviewReady"]
+    },
+    "medium": {
+      "flow_id": "xrain-views-filter",
+      "revision": 3,
+      "timeout_ms": 180000,
+      "checks": {
+        "authenticated": {
+          "predicate": { "type": "page", "text": { "contains": ["demo-admin", "XRain Demo"], "not_contains": "欢迎回来" } },
+          "timeout_ms": 15000,
+          "poll_ms": 200,
+          "stable_ms": 200
+        },
+        "viewsReady": {
+          "predicate": { "type": "all", "conditions": [
+            { "type": "page", "url": { "equals": { "input": "viewsUrl" } }, "text": { "contains": ["内置标准对象", "Email message", "导出 CSV"] } },
+            { "type": "element", "target": "search", "count": { "equals": 1 }, "visible": true, "enabled": true, "editable": true },
+            { "type": "element", "target": "table", "count": { "equals": 1 } }
+          ] },
+          "timeout_ms": 15000,
+          "poll_ms": 200,
+          "stable_ms": 200
+        },
+        "searchFilled": {
+          "predicate": { "type": "all", "conditions": [
+            { "type": "element", "target": "search", "count": { "equals": 1 }, "value": { "equals": { "input": "searchTerm" } } },
+            { "type": "element", "target": "table", "count": { "equals": 1 }, "text": { "equals": "没有符合条件的记录" } }
+          ] },
+          "timeout_ms": 15000,
+          "poll_ms": 200,
+          "stable_ms": 200
+        },
+        "searchReset": {
+          "predicate": { "type": "all", "conditions": [
+            { "type": "element", "target": "search", "count": { "equals": 1 }, "value": { "equals": "" } },
+            { "type": "element", "target": "table", "count": { "equals": 1 }, "text": { "equals": "暂无记录" } }
+          ] },
+          "timeout_ms": 15000,
+          "poll_ms": 200,
+          "stable_ms": 200
+        }
+      },
+      "steps": [
+        {
+          "id": "ensure",
+          "label": "连接已登录的 XRain 工作区",
+          "timeout_ms": 45000,
+          "action": { "type": "ensure", "auto_start": true, "profile_mode": "managed", "url": { "input": "url" } },
+          "expect": ["authenticated"]
+        },
+        {
+          "id": "views",
+          "label": "打开业务对象数据视图",
+          "timeout_ms": 30000,
+          "requires": ["authenticated"],
+          "action": { "type": "navigate", "url": { "input": "viewsUrl" }, "wait_until": "load", "timeout_ms": 20000 },
+          "expect": ["viewsReady"]
+        },
+        {
+          "id": "filter",
+          "label": "搜索当前对象记录",
+          "timeout_ms": 30000,
+          "requires": ["viewsReady"],
+          "action": { "type": "fill", "target": "search", "value": { "input": "searchTerm" }, "timeout_ms": 15000 },
+          "expect": ["searchFilled"]
+        },
+        {
+          "id": "clear_filter",
+          "label": "清理筛选并恢复列表",
+          "timeout_ms": 30000,
+          "consumes": ["filter.searchFilled"],
+          "releases": ["filter.searchFilled"],
+          "action": { "type": "fill", "target": "search", "value": "", "timeout_ms": 15000 },
+          "expect": ["searchReset"]
+        }
+      ],
+      "final_checks": ["clear_filter.searchReset"]
+    },
+    "complex": {
+      "flow_id": "xrain-email-fields",
+      "revision": 2,
+      "timeout_ms": 180000,
+      "checks": {
+        "authenticated": {
+          "predicate": { "type": "page", "text": { "contains": ["demo-admin", "XRain Demo"], "not_contains": "欢迎回来" } },
+          "timeout_ms": 15000,
+          "poll_ms": 200,
+          "stable_ms": 200
+        },
+        "entityDesignReady": {
+          "predicate": { "type": "page", "url": { "equals": { "input": "entityDesignUrl" } }, "text": { "contains": ["对象设计", "Email message", "新建对象"] } },
+          "timeout_ms": 15000,
+          "poll_ms": 200,
+          "stable_ms": 200
+        },
+        "emailObjectReady": {
+          "predicate": { "type": "element", "target": "emailObject", "count": { "equals": 1 }, "visible": true, "enabled": true, "text": { "contains": "infra_email_message" } },
+          "timeout_ms": 15000,
+          "poll_ms": 200,
+          "stable_ms": 200
+        },
+        "emailDetailReady": {
+          "predicate": { "type": "page", "url": { "equals": { "input": "emailEntityUrl" } }, "text": { "contains": ["Email message", "API Name", "infra_email_message"] } },
+          "timeout_ms": 15000,
+          "poll_ms": 200,
+          "stable_ms": 200
+        },
+        "fieldsReady": {
+          "predicate": { "type": "all", "conditions": [
+            { "type": "page", "url": { "equals": { "input": "emailEntityUrl" } }, "text": { "contains": ["字段列表", "Accepted at", "共 22 条"] } },
+            { "type": "element", "target": "fieldsTab", "count": { "equals": 1 }, "attribute": { "name": "aria-selected", "equals": "true" } }
+          ] },
+          "timeout_ms": 15000,
+          "poll_ms": 200,
+          "stable_ms": 200
+        }
+      },
+      "steps": [
+        {
+          "id": "ensure",
+          "label": "连接已登录的 XRain 工作区",
+          "timeout_ms": 45000,
+          "action": { "type": "ensure", "auto_start": true, "profile_mode": "managed", "url": { "input": "url" } },
+          "expect": ["authenticated"]
+        },
+        {
+          "id": "entity_design",
+          "label": "打开对象设计",
+          "timeout_ms": 30000,
+          "requires": ["authenticated"],
+          "action": { "type": "navigate", "url": { "input": "entityDesignUrl" }, "wait_until": "load", "timeout_ms": 20000 },
+          "expect": ["entityDesignReady"]
+        },
+        {
+          "id": "select_email",
+          "label": "选择 Email message 对象",
+          "timeout_ms": 30000,
+          "requires": ["entityDesignReady", "emailObjectReady"],
+          "action": { "type": "click", "target": "emailObject", "timeout_ms": 15000 },
+          "expect": ["emailDetailReady"]
+        },
+        {
+          "id": "open_fields",
+          "label": "打开字段列表",
+          "timeout_ms": 30000,
+          "consumes": ["select_email.emailDetailReady"],
+          "releases": ["select_email.emailDetailReady"],
+          "action": { "type": "click", "target": "fieldsTab", "timeout_ms": 15000 },
+          "expect": ["fieldsReady"]
+        }
+      ],
+      "final_checks": ["open_fields.fieldsReady"]
+    },
+    "probe": {
+      "flow_id": "xrain-prior-invalidation",
+      "revision": 3,
+      "timeout_ms": 180000,
+      "checks": {
+        "authenticated": {
+          "predicate": { "type": "page", "text": { "contains": ["demo-admin", "XRain Demo"], "not_contains": "欢迎回来" } },
+          "timeout_ms": 15000,
+          "poll_ms": 200,
+          "stable_ms": 200
+        },
+        "viewsReady": {
+          "predicate": { "type": "all", "conditions": [
+            { "type": "page", "url": { "equals": { "input": "viewsUrl" } }, "text": { "contains": ["内置标准对象", "Email message", "导出 CSV"] } },
+            { "type": "element", "target": "search", "count": { "equals": 1 }, "visible": true, "enabled": true, "editable": true },
+            { "type": "element", "target": "table", "count": { "equals": 1 } }
+          ] },
+          "timeout_ms": 15000,
+          "poll_ms": 200,
+          "stable_ms": 200
+        },
+        "expectedSearch": {
+          "predicate": { "type": "element", "target": "search", "count": { "equals": 1 }, "value": { "equals": { "input": "searchTerm" } } },
+          "timeout_ms": 15000,
+          "poll_ms": 200,
+          "stable_ms": 200
+        },
+        "injectedSearch": {
+          "predicate": { "type": "element", "target": "search", "count": { "equals": 1 }, "value": { "equals": { "input": "injectedTerm" } } },
+          "timeout_ms": 15000,
+          "poll_ms": 200,
+          "stable_ms": 200
+        }
+      },
+      "steps": [
+        {
+          "id": "ensure",
+          "label": "连接已登录的 XRain 工作区",
+          "timeout_ms": 45000,
+          "action": { "type": "ensure", "auto_start": true, "profile_mode": "managed", "url": { "input": "url" } },
+          "expect": ["authenticated"]
+        },
+        {
+          "id": "views",
+          "label": "打开筛选验证页",
+          "timeout_ms": 30000,
+          "requires": ["authenticated"],
+          "action": { "type": "navigate", "url": { "input": "viewsUrl" }, "wait_until": "load", "timeout_ms": 20000 },
+          "expect": ["viewsReady"]
+        },
+        {
+          "id": "search_expected",
+          "label": "建立筛选结果事实",
+          "timeout_ms": 30000,
+          "requires": ["viewsReady"],
+          "action": { "type": "fill", "target": "search", "value": { "input": "searchTerm" }, "timeout_ms": 15000 },
+          "expect": ["expectedSearch"]
+        },
+        {
+          "id": "inject_change",
+          "label": "注入未提交的筛选变更（负向验证）",
+          "timeout_ms": 30000,
+          "action": { "type": "fill", "target": "search", "value": { "input": "injectedTerm" }, "timeout_ms": 15000 },
+          "expect": ["injectedSearch"]
+        },
+        {
+          "id": "dependent_read",
+          "label": "依赖原筛选事实的读取应主动接管",
+          "timeout_ms": 30000,
+          "consumes": ["search_expected.expectedSearch"],
+          "action": { "type": "wait", "target": "search", "timeout_ms": 5000 },
+          "expect": ["viewsReady"]
+        }
+      ],
+      "final_checks": ["dependent_read.viewsReady"]
+    }
+  }
+}

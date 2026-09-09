@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Windows Agent CLI Fixture</title>
+  <style>
+    body { font: 16px system-ui, sans-serif; margin: 3rem; max-width: 42rem; }
+    label, input, select, button { display: block; margin: .5rem 0; }
+    input, select { min-width: 18rem; padding: .45rem; }
+    button { padding: .5rem 1rem; }
+    #result { margin-top: 1.5rem; padding: 1rem; border: 1px solid #999; }
+  </style>
+</head>
+<body>
+  <h1>Windows Agent CLI Fixture</h1>
+  <p>This local page is a deterministic input/select/query target for the CLI smoke test.</p>
+  <label for="query">Query</label>
+  <input id="query" name="query" type="text" aria-label="Query" value="">
+  <label for="category">Category</label>
+  <select id="category" name="category" aria-label="Category">
+    <option value="desktop">Desktop</option>
+    <option value="browser">Browser</option>
+    <option value="automation">Automation</option>
+  </select>
+  <button id="run" type="button" onclick="runQuery()">Run query</button>
+  <div id="result" role="status" aria-live="polite">No query yet</div>
+  <div id="delayed-ready" role="status" hidden>Delayed condition ready</div>
+  <script>
+    const fixtureParams = new URLSearchParams(location.search);
+    const delayMs = Math.max(0, Number(fixtureParams.get('delay_ms') || 0));
+    if (delayMs > 0) {
+      setTimeout(() => { document.getElementById('delayed-ready').hidden = false; }, delayMs);
+    } else {
+      document.getElementById('delayed-ready').hidden = false;
+    }
+
+    function runQuery() {
+      const query = document.getElementById('query').value;
+      const category = document.getElementById('category').value;
+      const result = `Query: ${query} | Category: ${category}`;
+      document.getElementById('result').textContent = result;
+      // The title makes the black-box result observable through Win32 window
+      // metadata even when Chrome does not expose page DOM controls to UIA.
+      document.title = `Windows Agent CLI Fixture — ${result}`;
+    }
+  </script>
+</body>
+</html>

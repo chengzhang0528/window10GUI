@@ -1,0 +1,4 @@
+interface:
+  display_name: "DeskPilot Testing"
+  short_description: "Teach test agents to use DeskPilot as an external executor"
+  default_prompt: "Use $deskpilot-testing when an explicit test task needs DeskPilot as an external NDJSON executor with verification, failure classification, and evidence."
