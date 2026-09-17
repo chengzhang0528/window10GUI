@@ -6,7 +6,7 @@ Status: Active
 Kind: AgentEntry
 Scope: windows-agent-cli
 Owner: 项目维护者
-Updated: 2026-09-09
+Updated: 2026-09-17
 Depends On:
 - ../../WORKSPACE_STRUCTURE.md
 - ../../工作流/WORKFLOW_CONTRACT.md
@@ -24,6 +24,7 @@ Depends On:
 - 用户只给网站与待操作、测试或配置的功能时，使用 [场景进化 Skill](../../../.agents/skills/deskpilot-flow-evolution/SKILL.md)，由 Luna 通过 DeskPilot 观察、分组执行、核验并根据实际状态恢复；只在已有场景匹配目标与副作用时复用，不要求用户描述步骤或先提供场景。宿主适配代码位于 `src/DeskPilot.Flow/`，使用或修改该宿主时读取其源码入口。
 - 涉及代码时继续读取 [源码根入口](../../../src/WindowsAgent.Cli/AGENTS.md)、目标类型和测试夹具；先用 `rg` 查现有实现。
 - 人类构建、接入和本地验证入口位于 [Windows Agent CLI 开发与验证](../../../src/WindowsAgent.Cli/README.md)。
+- 已获授权的本地便携目录更新与回退使用 [本地更新 Runbook](RUNBOOK_LOCAL_UPDATE.md)；不得重建或替换已固定制品，不发布远端二进制。
 - Agent 使用方法由仓库 Skill 提供：`deskpilot-core` 负责通用桌面执行，`deskpilot-browser` 负责 Chrome，`deskpilot-messaging` 负责跨应用桌面消息采集与回复编排，`deskpilot-testing` 仅在明确测试任务时加载；具体应用业务规则仍留在上层宿主。
 
 ## 项目边界

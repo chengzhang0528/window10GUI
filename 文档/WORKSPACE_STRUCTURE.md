@@ -4,7 +4,7 @@ Status: Active
 Kind: StructureContract
 Scope: coder_driver-template / 目录与知识放置
 Owner: 项目维护者
-Updated: 2026-09-07
+Updated: 2026-09-17
 Depends On:
 - ../AGENTS.md
 
@@ -34,7 +34,8 @@ Depends On:
 - `项目/项目_windows-agent-cli/PRODUCT_CONTRACT.md` -> `ProductContract`
 - `项目/项目_windows-agent-cli/CURRENT_DESIGN.md` -> `CurrentDesign`
 - `项目/项目_windows-agent-cli/DECISION_STRUCTURED_FLOW.md` -> `Decision`
-- `项目/项目_windows-agent-cli/推进中/` -> `ChangePlan,Issue`
+- `项目/项目_windows-agent-cli/RUNBOOK_LOCAL_UPDATE.md` -> `Runbook`
+- `项目/项目_windows-agent-cli/推进中/` -> `ChangePlan,DeploymentPlan,Issue`
 
 首次出现有可靠依据的未承诺结果时，在本文件同一改动中声明 `WORK_CANDIDATES.md -> WorkInventory`；首次出现实际工作空间级设计、决策、运行或活动事实时，也在同一改动中声明其精确位置与 Kind。
 
