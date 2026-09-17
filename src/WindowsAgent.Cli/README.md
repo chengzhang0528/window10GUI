@@ -10,7 +10,7 @@
 
 CLI 是通用 Windows 10 交互式桌面执行底座：负责窗口/页面观察、GUI/CDP 动作、等待、引用生命周期、超时、结构化错误、批量组合、操作提示和前台恢复。外部 Agent 宿主负责业务意图、场景脚本、选择器、断言、测试数据、结果报告和高影响动作的授权。
 
-CLI 不内置模型、规划、自研脚本 DSL、通用断言库或测试 runner。脚本应直接使用 JSON/NDJSON，或复用宿主语言和成熟开源测试框架，通过 `workflow.run`/`actions.batch` 调用 CLI；测试发现、fixture、断言、重试、报告和 CI 由外部 runner 或场景层负责。`workflow.run` 外层状态同步为 `completed`、`paused` 或 `cancelled`；暂停时先让用户处理登录/验证，取消时重新观察后再发起后续请求。
+CLI 不内置语言模型规划、自研脚本 DSL、通用断言库或测试 runner；随程序交付的 Tiny 模型只负责离线 OCR。脚本应直接使用 JSON/NDJSON，或复用宿主语言和成熟开源测试框架，通过 `workflow.run`/`actions.batch` 调用 CLI；测试发现、fixture、断言、重试、报告和 CI 由外部 runner 或场景层负责。`workflow.run` 外层状态同步为 `completed`、`paused` 或 `cancelled`；暂停时先让用户处理登录/验证，取消时重新观察后再发起后续请求。
 
 闲鱼、表单或其他应用示例只用于验证底座，不会成为核心业务模块。后续需求只有在能够跨应用复用、且可以通过公开命令表达时才沉淀到 CLI；单一网站或业务对象的逻辑应留在上层脚本/adapter。新增 provider 不得破坏 session、超时、错误、恢复和确认等公共契约。
 
@@ -68,13 +68,15 @@ $requests -join "`n" | src\WindowsAgent.Cli\bin\Debug\net10.0-windows10.0.19041.
 
 ### 通用桌面消息采集
 
-`messages.observe` 对指定窗口先执行可信截图，再用 Windows 自带的离线 OCR 返回带位置的文本候选。调用方应传窗口相对坐标的 `identity_region`、`content_region`，并用 `expected_identity` 断言当前会话；身份不匹配时命令返回 `CONTEXT_IDENTITY_MISMATCH`，不会把其他会话内容误归到目标。
+`messages.observe` 对指定窗口先执行可信截图，再用随程序交付的 Paddle Tiny 返回带位置的文本候选；运行时不联网下载模型。调用方应传窗口相对坐标的 `identity_region`、`content_region`，并用 `expected_identity` 断言当前会话；身份不匹配时命令返回 `CONTEXT_IDENTITY_MISMATCH`，不会把其他会话内容误归到目标。
 
 ```json
 {"id":"observe-chat","method":"messages.observe","params":{"process":"ExampleChat","identity_region":{"x":260,"y":0,"width":620,"height":90},"content_region":{"x":260,"y":90,"width":620,"height":520},"expected_identity":["Support queue"],"identity_match":"all","restore_original_window":true}}
 ```
 
-默认结果只包含身份区文本、内容区文本和 `message_candidates`，每项带 `bounds`、`side` 与几何 `role_hint`；调试时可传 `include_text_blocks=true`，需要逐词坐标时再加 `include_words=true`。OCR 字符可能有误，左右位置也不等于已确认用户身份。消息气泡归并、发送者识别、去重、跨页滚动、统计、回复策略和应用选择器由上层 Agent 脚本负责，CLI 不内置微信、客服软件或网站流程。
+默认结果只包含身份区文本、内容区文本和 `message_candidates`，每项带 `bounds`、`side` 与几何 `role_hint`，`recognition.backend` 为 `paddle_tiny_offline`。调试时可传 `include_text_blocks=true`，需要逐词坐标时再加 `include_words=true`：此时才额外调用 Windows OCR，只有文字和位置均能可靠对应的块才返回 `words`。`recognition.word_localization.status` 为 `verified_matches` 只说明有部分块匹配成功；其余块的词框仍可能为空。`unavailable` 表示 Windows 辅助不可用，`no_verified_matches` 表示没有可靠对应，Tiny 正文仍保留。
+
+不要把 Tiny 的整行框当作行内链接的框，不要按字数均分来猜点击点。可靠词框会标记 `words_backend=windows_media_ocr_offline`；使用时仍须确认目标唯一且截图引用新鲜。OCR 字符可能有误，左右位置也不等于已确认用户身份。消息气泡归并、发送者识别、去重、跨页滚动、统计、回复策略和应用选择器由上层 Agent 脚本负责，CLI 不内置微信、客服软件或网站流程。
 
 ### 国内网络下的全自动 Chrome 页面操作
 
@@ -146,13 +148,27 @@ $request | src\WindowsAgent.Cli\bin\Debug\net10.0-windows10.0.19041.0\win-x64\wi
 
 测试页 `test-fixtures\agent-form.html` 是本地、无网络的确定性页面，包含输入框、下拉框、查询按钮和可选的 `?delay_ms=800` 延迟条件。以下动作已在当前已登录 Chrome 的新标签页中用 `win-agent.exe` 的同一 NDJSON 会话实际完成：输入 `Latest build check`，选择 `Automation`，调用按钮，并从 UIA 文本和窗口标题读回 `Query: Latest build check | Category: automation`。显式保留的截图位于 [`artifacts\chrome-cli-final-overlay-batch.png`](../../artifacts/chrome-cli-final-overlay-batch.png)。activity 的验收标准是操作后 `overlay_was_visible=true`、最后操作 2 秒后 `overlay_visible=false`、`status_panel_visible=true`、`status=idle`、`restored_original_window=true`，说明瞬时控制提示与稳定状态面板已经分离。
 
-网页控件是否出现在 Chrome UIA 树取决于窗口是否已恢复并置前台；若网页树为空，应先重新 `activate → observe`，仍为空时使用键盘/坐标 fallback，不把 UIA 空树当成页面不存在。`doctor` 会把 GUI、Windows 离线 OCR 与 Chrome/CDP 分开报告，Chrome 不可用时 GUI 仍可用。可信前台窗口截图标明 `screen_copy_foreground_verified`；后台 `PrintWindow/GDI` 结果为空或不可信时明确失败，应先激活后再取证。
+网页控件是否出现在 Chrome UIA 树取决于窗口是否已恢复并置前台；若网页树为空，应先重新 `activate → observe`，仍为空时使用键盘/坐标 fallback，不把 UIA 空树当成页面不存在。`doctor` 会把 GUI、Tiny 离线 OCR、Windows 辅助词定位与 Chrome/CDP 分开报告，Chrome 或辅助词定位不可用时主 OCR 仍可用。可信前台窗口截图标明 `screen_copy_foreground_verified`；后台 `PrintWindow/GDI` 结果为空或不可信时明确失败，应先激活后再取证。
 
 ## Development：通用桌面消息采集与回复验证
 
-同一公开 CLI 已在当前 Windows 10 桌面完成两类应用的 Development 级验证：在 Qt 聊天窗口中用调用方给定区域断言目标会话身份、采集当前可见消息候选、填写并发送一条测试回复，再从排除输入框的消息区域回读到右侧候选；在 ChatGPT 窗口中复用同一 `messages.observe`，使用另一组身份条件成功读取定位文本。微信窗口的下拉弹层在列窗与截图期间保持打开，证明观察没有通过重新激活父窗口破坏弹层。
+Windows OCR 原实现曾通过公开 CLI 完成 Qt 聊天窗口身份、候选采集、回复回读及 ChatGPT 窗口的另一组身份验证。该旧结果不代替 Tiny 接入后的真实应用验证。
 
 这项验证只证明通用执行原语，不把任何应用业务流程写入 CLI。一次调用只覆盖当前可见区域；完整历史需要上层 Agent 用滚动、每页身份复核和去重循环完成。测试截图由 session 临时管理并已清理，没有把聊天内容写入仓库。
+
+修改 OCR 后，在仓库根目录运行定向验证：
+
+```powershell
+dotnet run --project src/WindowsAgent.Cli/tests/WindowsAgent.Ocr.Tests.csproj
+```
+
+成功时输出 `PASS`。这会生成并清理本地测试图片，不读取现有应用。若还需验证公开 CLI，先按上文构建 CLI，在已登录、未锁屏的 Windows 桌面运行：
+
+```powershell
+dotnet run --project src/WindowsAgent.Cli/tests/WindowsAgent.Ocr.Tests.csproj --no-build -- --desktop src/WindowsAgent.Cli/bin/Debug/net10.0-windows10.0.19041.0/win-x64/win-agent.exe
+```
+
+该命令会短暂打开专用测试窗口，验证 Tiny 读取、身份拒绝和 Windows 词框，并在结束时关闭窗口与 helper、清理临时截图；不会向现有聊天发送消息。此项正向词框验证要求 Windows 当前用户已安装可用 OCR 语言包。若失败，按断言定位问题；真实应用字体、缩放、标识符及点击效果仍须用对应场景单独核验。
 
 ## SystemTest 与 Deployment
 

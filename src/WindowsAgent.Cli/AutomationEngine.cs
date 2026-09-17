@@ -12,6 +12,7 @@ namespace WindowsAgent;
 internal sealed class AutomationEngine
 {
     private readonly SessionState _session = new();
+    private readonly DesktopTextRecognition _desktopText = new();
     private readonly object _lifecycleGate = new();
     private int _activeCommandCount;
     private int _cancelRequested;
@@ -34,6 +35,7 @@ internal sealed class AutomationEngine
             finally
             {
                 _session.Chrome.Dispose();
+                _desktopText.Dispose();
             }
         }
     }
@@ -816,7 +818,7 @@ internal sealed class AutomationEngine
                 "workflow.run",
                 "actions.batch", "interaction.begin", "interaction.end", "interaction.cancel", "interaction.status"
             },
-            execution_layers = new[] { "cdp_runtime", "cdp_dom", "uia_pattern", "uia_input", "uia_clipboard_paste", "clipboard_paste", "win32", "gdi_capture", "screen_copy", "windows_media_ocr_offline", "coordinate", "activity_overlay" },
+            execution_layers = new[] { "cdp_runtime", "cdp_dom", "uia_pattern", "uia_input", "uia_clipboard_paste", "clipboard_paste", "win32", "gdi_capture", "screen_copy", "paddle_tiny_offline", "windows_media_ocr_offline", "coordinate", "activity_overlay" },
             providers = new
             {
                 cdp = "first_class_page_provider",
@@ -865,7 +867,7 @@ internal sealed class AutomationEngine
             ui_automation = new { available = rootAvailable, error = rootError },
             visible_windows = windows.Count,
             capture = new { backend = "PrintWindow/GDI + verified foreground screen-copy", available = true, trust = "target_identity_and_screen_ownership_checked" },
-            desktop_text = OfflineTextRecognition.Diagnose(),
+            desktop_text = _desktopText.Diagnose(),
             input = new { backend = "SendInput", available = true },
             activity = _session.Activity.Status(),
             chrome = _session.Chrome.Diagnose(),
@@ -1352,16 +1354,11 @@ internal sealed class AutomationEngine
         var fullRegion = new TextBounds(0, 0, bounds.Width, bounds.Height);
         var identityRegion = ReadTextRegion(parameters, fullRegion, "identity_region", "identity-region", "context_region", "context-region");
         var contentRegion = ReadTextRegion(parameters, fullRegion, "content_region", "content-region", "message_region", "message-region");
-        // Identity titles and message bodies have materially different font
-        // sizes. Infer the title from the native-scale full layout (cropping
-        // can remove the context Windows OCR needs), while cropping and scaling
-        // the caller-owned content region for small CJK chat text. The provider
-        // caps scaling to Windows OCR limits and maps all bounds back.
-        var identityRecognition = OfflineTextRecognition.Recognize(path, null, 1d);
-        var contentRecognition = OfflineTextRecognition.Recognize(path, contentRegion, 3d);
         var includeTextBlocks = GetBool(parameters, false, "include_text_blocks", "include-text-blocks", "include_blocks", "include-blocks");
         var includeWords = GetBool(parameters, false, "include_words", "include-words");
-        var identityBlocks = identityRecognition.Blocks.Where(block => CenterInside(block.Bounds, identityRegion)).ToArray();
+        var desktopText = _desktopText.Recognize(path, includeTextBlocks && includeWords, ThrowIfCancellationRequested);
+        var contentRecognition = desktopText.Recognition;
+        var identityBlocks = contentRecognition.Blocks.Where(block => CenterInside(block.Bounds, identityRegion)).ToArray();
         var contentBlocks = contentRecognition.Blocks.Where(block => CenterInside(block.Bounds, contentRegion)).ToArray();
         var expectedIdentity = GetStringArray(parameters, "expected_identity", "expected-identity", "expected_context", "expected-context");
         var identityText = string.Join("\n", identityBlocks.Select(block => block.Text));
@@ -1436,6 +1433,9 @@ internal sealed class AutomationEngine
                 backend = contentRecognition.Backend,
                 language = contentRecognition.Language,
                 offline = true,
+                word_localization = new { backend = DesktopTextRecognition.WordBackend,
+                    status = desktopText.WordLocalization.Status, error_code = desktopText.WordLocalization.ErrorCode,
+                    matched_blocks = desktopText.WordLocalization.MatchedBlocks },
                 identity = new { text = identityText, blocks = includeTextBlocks ? identityBlocks.Select(block => TextBlockDto(block, includeWords)).ToArray() : null },
                 content = new { text = string.Join("\n", contentBlocks.Select(block => block.Text)), blocks = includeTextBlocks ? contentBlocks.Select(block => TextBlockDto(block, includeWords)).ToArray() : null }
             },
@@ -1459,7 +1459,8 @@ internal sealed class AutomationEngine
         block_id = block.Id,
         text = block.Text,
         bounds = BoundsDto(block.Bounds),
-        words = includeWords ? block.Words.Select(word => new { text = word.Text, bounds = BoundsDto(word.Bounds) }).ToArray() : null
+        words = includeWords ? block.Words.Select(word => new { text = word.Text, bounds = BoundsDto(word.Bounds) }).ToArray() : null,
+        words_backend = includeWords && block.Words.Count > 0 ? DesktopTextRecognition.WordBackend : null
     };
 
     private static object BoundsDto(TextBounds bounds)
@@ -2487,6 +2488,8 @@ internal sealed class AutomationEngine
             {
                 cleanupErrors.Add($"CHROME_DISPOSE_FAILED: {ex.Message}");
             }
+            try { _desktopText.Dispose(); }
+            catch (Exception ex) { cleanupErrors.Add($"OCR_DISPOSE_FAILED: {ex.GetType().Name}"); }
         }
         return new { closed = true, session_id = _session.Id, activity, cleanup_errors = cleanupErrors.ToArray() };
     }

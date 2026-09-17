@@ -1,0 +1,28 @@
+DeskPilot OCR dependencies (unmodified NuGet libraries and embedded models)
+
+Sdcb.SimdPaddleOCR 1.3.0
+Copyright (c) 2026 Sdcb.PaddleOCR contributors
+Source: https://github.com/sdcb/SimdPaddleOCR
+Package source revision: 16292d0640b762d27d963be593a5c0833c24c904
+
+Sdcb.SimdPaddleOCR.ModelProvider 1.0.0
+Sdcb.SimdPaddleOCR.Models.ChineseV6Tiny 1.0.0
+Sdcb.SimdPaddleOCR.Models.TextLineOrientation 1.0.0
+Source: https://github.com/sdcb/SimdPaddleOCR
+
+All four packages declare Apache-2.0. The license text is provided in
+SimdPaddleOCR-LICENSE.txt in this directory.
+
+PP-OCRv6 tiny and text-line orientation model assets:
+The embedded ONNX models and dictionaries derive from PaddleOCR/PP-OCR.
+Copyright (c) 2016 PaddlePaddle Authors. All Rights Reserved.
+Upstream model metadata identifies these assets as Apache-2.0.
+Sources:
+https://github.com/PaddlePaddle/PaddleOCR
+https://huggingface.co/PaddlePaddle/PP-OCRv6_tiny_det_onnx
+https://huggingface.co/PaddlePaddle/PP-OCRv6_tiny_rec_onnx
+https://huggingface.co/PaddlePaddle/PP-LCNet_x0_25_textline_ori_onnx
+
+PaddleOCR and PP-OCR are trademarks of their respective owners; this
+project is not endorsed by or affiliated with them.
+Upstream notices: https://github.com/sdcb/SimdPaddleOCR/blob/16292d0640b762d27d963be593a5c0833c24c904/THIRD-PARTY-NOTICES.md

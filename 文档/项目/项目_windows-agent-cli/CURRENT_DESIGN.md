@@ -4,7 +4,7 @@ Status: Active
 Kind: CurrentDesign
 Scope: windows-agent-cli / 桌面底座与结构化流程宿主实现
 Owner: 项目维护者
-Updated: 2026-09-09
+Updated: 2026-09-17
 Depends On:
 - PRODUCT_CONTRACT.md
 - ../../../src/WindowsAgent.Cli/AGENTS.md
@@ -27,7 +27,7 @@ Depends On:
 | 让用户知道 Agent 正在操作并能看见稳定状态 | 每显示器一个原生 layered、`NOACTIVATE`、鼠标穿透的静态彩色控制边框；每次操作立即更新状态标签并重置 2 秒滑动熄灭计时；紧邻 lease 复用同一窗口；可选合成指针和脉冲目标高亮；稳定状态面板保留到下一状态或 `close` | `interaction.*`、`actions.batch` 或单步自动 lease；逐步 `action_label`；`show_action_trace=true`；`interaction.status` | `DesktopActivityOverlay.cs`、`DesktopActivityCoordinator.cs`、`AutomationEngine.cs` | 仅 helper 内存状态 | 面板存在不代表仍在控制；`overlay_visible` 只表示边框仍在可见期；合成指针不抢焦点；坐标 fallback 后尽力恢复真实鼠标位置 |
 | 让用户可随时停止托管 | helper 并发接收控制请求；`interaction.cancel` 不等待生命周期锁，向当前动作/Chrome 等待发送取消信号；在动作/等待边界收口 lease，面板保留“已取消”状态 | `interaction.cancel`、`status=cancelled`、`ACTIVITY_CANCELLED` | `Program.cs`、`AutomationEngine.cs`、`ChromeCdp.cs` | 仅 helper 内存状态 | 取消确认、控制边框隐藏、状态面板留存和前台恢复可观察 |
 | 缩短连续表单动作并统一收口 | 最多 32 步有序、非原子、默认 fail-fast；批次结束让控制边框按最后操作的 2 秒截止时间熄灭并尽力恢复原前台窗口，稳定状态面板保留“等待下一步/需用户处理/失败”等状态 | `actions.batch` | `AutomationEngine.cs` | 仅 helper 内存状态 | Chrome 本地表单批处理实测 |
-| 通用桌面消息采集 | 可信窗口截图经 Windows 离线 OCR 转换为定位文本候选；调用方提供身份区、内容区和预期会话身份，身份不符时停止 | `messages.observe` | `AutomationEngine.cs`、`OfflineTextRecognition.cs`、`NativeMethods.cs` | 临时截图随 session 清理，不保存消息 | 微信 Qt 窗口完成身份断言、可见消息采集与回复回读；同一原语在 ChatGPT 窗口完成跨应用身份验证 |
+| 通用桌面消息采集 | 可信窗口截图经 Paddle Tiny 转换为定位文本候选；按需用 Windows OCR 提供经过文字与几何匹配的词框，身份不符时停止 | `messages.observe` | `AutomationEngine.cs`、`DesktopTextRecognition.cs`、`OfflineTextRecognition.cs`、`NativeMethods.cs` | 模型在 helper 内复用并随关闭释放；临时截图随 session 清理，不保存消息 | 源码根 `tests/WindowsAgent.Ocr.Tests.csproj` 覆盖真实模型、几何关联、辅助不可用和公开 CLI 测试窗口 |
 | 通用底座与场景解耦 | CLI 只提供桌面/页面执行原语；业务流程由 Agent 宿主脚本组合 | `workflow.run`、`actions.batch`、公开命令协议 | `AutomationEngine.cs`、`ChromeCdp.cs`、`Program.cs` | 场景状态不进入 CLI | 闲鱼与本地表单均复用同一 GUI/CDP 能力 |
 | 纯数据流程与通用执行器分离 | DeskPilot.Flow 读取动作、定位及完整比较判据，执行 requires/consumes/expect/final_checks；Skill 指导 Agent 调整数据 | `node src/DeskPilot.Flow/run.mjs`，详见宿主 README | `src/DeskPilot.Flow/` 与场景 JSON | 无数据库；持久化纯数据定义，执行状态默认内存 | 数据解析/谓词及宿主定向测试；Luna 通过 DeskPilot 验证只读场景、56 步父子对象闭环两次及保存前失效接管；测试数据已清理 |
 
@@ -41,7 +41,7 @@ Depends On:
                          ▼
 Windows Agent CLI 底座
   ├─ Session / lease / timeout / cancellation / structured errors
-  ├─ GUI provider：UIA、SendInput、Win32、可信截图、Windows 离线 OCR
+  ├─ GUI provider：UIA、SendInput、Win32、可信截图、Tiny 离线 OCR / Windows 词框辅助
   ├─ CDP provider：Chrome 页面导航、等待、脚本、DOM 操作
   └─ 观察凭据、引用生命周期、前台恢复、操作提示
                          │
@@ -72,17 +72,15 @@ CLI 的 `workflow.run`/`actions.batch` 是稳定的动作协议，不是新的�
 
 ```text
 Agent host
-        │ argv 或 NDJSON stdin/stdout
-        ▼
+        ▼ argv 或 NDJSON stdin/stdout
 win-agent 前台 CLI
-        │ 隐藏子进程、request id、超时、父进程退出联动
-        ▼
+        ▼ 隐藏子进程、request id、超时、父进程退出联动
 stateful Windows helper
         ├─ Session / Window / Observation / Element / Screenshot cache
         ├─ UI Automation：查询、读取、Pattern 动作
         ├─ User32 + SendInput：窗口、焦点、键鼠 fallback
         ├─ Trusted screen copy / PrintWindow / GDI：核验前台关系与屏幕像素归属后取证
-        ├─ Windows.Media.Ocr：离线识别带位置的桌面文本候选
+        ├─ DesktopTextRecognition：Tiny 离线主识别 / 按需 Windows.Media.Ocr 词框核验
         ├─ ChromeCdpProvider：本机 CDP 发现、自动启动、页面就绪、脚本和 DOM 动作
         ├─ DesktopActivityCoordinator：捕获原前台窗口、lease 深度、用户注意力窗口和恢复结果
         └─ DesktopActivityOverlay：独立 STA 消息线程上的多显示器非激活控制边框与稳定状态标签
@@ -137,7 +135,9 @@ session
 - `window_id` 绑定首次发现时的 HWND、PID 和窗口类名；句柄被关闭或回收后不会静默指向替代窗口，必须重新 `windows.find`。
 - 坐标操作检查引用属于同一窗口、仍是该窗口最新观察，并且窗口 bounds 未变化。
 - 当前前台是标准 owned popup 时直接按目标前台处理。同进程、无 owner 的 Qt 顶层窗口只有类名明确包含 popup/menu/tooltip，或同时满足 `WS_POPUP`、面积不超过目标 75%、且至少一半面积与目标重叠时，才作为瞬态弹层绑定并报告 `foreground_relation`；普通的第二个同进程窗口不会因重叠而冒充目标。
-- `messages.observe` 在同一可信截图上分开处理身份与正文：先以原始比例识别完整窗口布局并按身份区过滤标题，避免裁剪破坏 OCR 上下文；再裁剪内容区并以 Cubic 插值和受 Windows OCR 最大图像尺寸约束的 3× 自适应比例改善小号正文，最后把坐标映射回原窗口；`expected_identity` 不匹配时返回 `CONTEXT_IDENTITY_MISMATCH`。CLI 不把几何文本块升级为已归并的用户、会话或业务消息。
+- `messages.observe` 用 Tiny 对同一可信窗口截图进行一次原始比例识别，再按调用方身份区和内容区过滤；不沿用 Windows 的裁剪 3× 放大策略。Tiny 四边形转换为窗口相对物理像素的包围框，模型及推理 session 在 helper 内惰性加载、复用并随 close/shutdown 释放；不下载模型、不持久化模型缓存。`expected_identity` 的既有匹配规则和 `CONTEXT_IDENTITY_MISMATCH` 保持不变，几何文本块不升级为已归并的业务消息。
+- 仅同时请求 `include_text_blocks=true` 与 `include_words=true` 时运行 Windows OCR。Windows 行块必须有唯一 Tiny 几何归属，归属内按横向位置拼接的文字及词文字都须与 Tiny 行去空白后完全相同（保留大小写和标点）；每个词框需满足位置校验，词框并集还需覆盖对应行。无法对应就保留 Tiny 文本与空 `words`，不伪造字符框。`recognition.word_localization` 报告辅助后端、`not_requested/unavailable/no_verified_matches/verified_matches`、可选错误码与整图匹配块数；有可靠词框的 block 用 `words_backend` 标注来源。`verified_matches` 不表示所有行可定位，也不表示实际点击成功。
+- `Sdcb.SimdPaddleOCR` 固定 1.3.0、`ChineseV6Tiny` 固定 1.0.0；其传递依赖为嵌入式方向分类模型与 ModelProvider 1.0.0，不引入 Small、Python、OpenCV 或额外 OCR 服务。模型随 .NET 应用构建/发布包含，许可随 `licenses/` 复制。显式 doctor 检查 Tiny 初始化，并独立报告 Windows 词定位后端；Tiny 失败使用 `OCR_UNAVAILABLE/OCR_FAILED`，辅助 Windows 失败仅降级词定位。
 - 观察树限制 `depth` 和 `max_nodes`；缓存也有数量上限，避免长会话无界增长。
 - 每个 activity lease 在开始时捕获原前台窗口；正常结束顺序是清除可选动作轨迹 → 将稳定状态面板切换为“等待下一步”并保留尚未到期的控制边框 → 校验原 HWND 的 PID/类名 → 尽力恢复前台。边框在最后一次操作后 2 秒自行熄灭；下一操作先到则重置同一计时。若 Chrome 返回登录/风控暂停，面板切换为“等待用户处理”并立即清除边框，同时校验、保留匹配 Chrome 窗口前台，不恢复用户原窗口；取消和失败也立即清除边框，且取消不承诺撤销已发出的输入；失败只报告结构化清理错误，不绕过 Windows 前台策略。
 - 批次步骤按输入顺序执行，默认第一处错误停止；`on_error=continue` 仅允许继续独立的非变更读取，遇到变更步骤会停止。任何变更成功或失败都会使旧观察引用不可复用。
@@ -154,7 +154,7 @@ session
 | 窗口激活 | User32 恢复并置前台 | 无静默降级 | `win32` |
 | 坐标/键盘/滚轮 | `SendInput` | 无 | `coordinate` / `send_input` |
 | 截图 | 核验 PID、类名、边界、前台关系和屏幕采样归属后使用 `CopyFromScreen`；后台先尝试 `PrintWindow(PW_RENDERFULLCONTENT)` | 提示层在取证帧短暂隐藏；空白 `PrintWindow` 不解释为业务空白；无法证明窗口归属时明确失败 | `screen_copy_foreground_verified` / `screen_copy_after_blank_printwindow_verified` / `WINDOW_CAPTURE_UNTRUSTED` / `WINDOW_CAPTURE_EMPTY` |
-| 桌面文本/消息候选 | `Windows.Media.Ocr` 离线识别可信窗口截图 | 按身份区/内容区过滤并返回 bounds、side、几何 `role_hint`；业务分组、去重、跨页滚动和回复策略在上层 | `windows_media_ocr_offline` / `CONTEXT_IDENTITY_MISMATCH` |
+| 桌面文本/消息候选 | Paddle Tiny 离线识别可信窗口截图 | 按需 Windows 词框匹配；按身份区/内容区过滤并返回 bounds、side、几何 `role_hint`；业务分组、去重和回复策略在上层 | `paddle_tiny_offline`；词框 `windows_media_ocr_offline` / `CONTEXT_IDENTITY_MISMATCH` |
 | Chrome 导航与就绪 | CDP `Page.bringToFront`/`Page.navigate` + `document.readyState` + 可操作内容探测 + 可选 CSS/脚本语义条件 + Network 请求计数和主文档导航链 | 默认 `DOMContentLoaded` 或已出现通用可操作内容；可在同一预算内等待业务控件/结果；登录/验证提前暂停，访问阻止返回 `CHROME_PAGE_BLOCKED`，超时返回 target、visibility、正文/控件数量、导航 initiator 和预算详情 | `cdp_page` |
 | Chrome 控件填值 | CDP `Runtime.evaluate` 原型 setter + `input/change` 事件 + 回读 | 无 | `cdp_dom` |
 | Chrome 控件选择 | CDP `<select>` value/label 匹配 + `input/change` 事件 + 回读 | UIA/SendInput 可作为同一 workflow 步骤 | `cdp_dom` / `uia_input` |
@@ -177,7 +177,7 @@ session
 
 第一版实现完成必须同时满足：
 
-1. 当前 Windows 10 交互式桌面上的 `doctor` 报告 UIA、SendInput、可信截图和 Windows 离线 OCR 后端可用。
+1. 当前 Windows 10 交互式桌面上的 `doctor` 报告 UIA、SendInput、可信截图和 Tiny 离线 OCR 后端可用；Windows 词框后端单独报告，缺少语言包不阻断主识别。
 2. 工程构建为 0 警告、0 错误。
 3. 同一持久 CLI 会话能通过 `workflow.run` 自动连接或启动 Chrome，在确定性本地页面等待就绪、填入文本、执行脚本选择下拉项、点击查询按钮，并用 CDP 回读一致结果。
 4. 显式路径截图在 CLI 退出后仍可读取，且画面与结构化回读一致。
@@ -185,7 +185,7 @@ session
 6. 显式 activity 的每个操作会立即把准确 `action_label` 写入状态面板并令 `overlay_visible=true`；2 秒内的新操作会重置截止时间，正常结束响应允许边框处于余留可见期，最后操作 2 秒后 `interaction.status` 必须为 `overlay_visible=false` 且 `status_panel_visible=true`（除非调用方关闭提示），并报告 `restored_original_window`；暂停、取消和失败立即清除边框，静态边框不持续重绘，动作轨迹短操作不闪烁且不进入截图证据。
 7. 一个不内置应用业务规则的 batch 能在 Qt 聊天窗口完成会话身份断言、可见消息候选采集、文本回复和发送后回读；同一 `messages.observe` 在第二个非聊天应用窗口也能完成身份断言。
 
-本次最新实测环境是 Windows 10 build 19045、x64、Chrome 151.0.7922.173。除既有 Chrome 表单结果外，DeskPilot 在微信 Qt 窗口中识别到目标群聊身份并采集当前可见定位文本，发送测试回复后从排除输入区的消息区域回读到右侧候选；同一离线 OCR 原语在 ChatGPT 窗口用不同身份条件验证通过。场景选择器、消息统计和回复策略均未进入 CLI 核心。
+Windows OCR 原实现曾在 Windows 10 build 19045、x64、Chrome 151.0.7922.173 环境完成 Chrome 表单、微信 Qt 身份与回复回读及 ChatGPT 身份验证。Tiny 接入的定向证据是隔离桌面 fixture 经公开 CLI 完成可信截图、区域读取、身份拒绝、可选词定位与清理；不能把旧引擎场景结果或合成数据准确率当成新引擎的真实聊天业务验收。场景选择器、消息统计和回复策略均未进入 CLI 核心。
 
 ## 当前限制与停止边界
 - 工程目标是 `net10.0-windows10.0.19041.0`；默认 Windows x64 便携包由源码根的 `build-portable.mjs` 生成。约 20 KB 原生入口保持 `bin/win-agent.exe` 调用路径，内部 `bin/app/win-agent.exe` 依赖系统 .NET 10 Desktop Runtime x64；相对路径 Skill、运行文档与可选 Flow 宿主随包交付。
@@ -195,5 +195,5 @@ session
 - `HostClient.Dispose` 收到 close 响应后等待最多 3 秒退出，避免将响应已完成误判为进程已退出；必要时仅终止 helper。Chrome 正常情况下保留供后续连接。DSH 等外部宿主的作业回收由宿主负责，使用方法见浏览器 Skill 的连接与恢复说明，不能把正常 CLI 退出验证外推为任意沙箱下的跨调用存活保证。
 - CDP 页面动作适合 DOM 可访问的页面；跨域 iframe、浏览器内部页和需要真实用户手势的特殊控件可能仍需 UIA/SendInput 步骤。所有页面等待都受 `timeout_ms` 约束，失败必须按错误码重新观察。
 - `PrintWindow/GDI` 不是 GPU、自绘、遮挡或 popup 场景的完整截图方案；前台可信屏幕拷贝要求目标关系和采样归属全部通过，后台不满足时会明确失败。WGC 与 Vision 属于后续独立能力。当前也不提供应用启动、拖拽、通用图像理解、应用语义消息解析、原生应用 adapter、安装器、签名、更新或日志审计流水。
-- Windows 离线 OCR 会产生字符误识别，`role_hint` 只是左右几何提示，不是已确认的发送者身份。完整历史采集需要上层脚本用滚动、身份复核和去重循环完成；CLI 不承诺一次 `messages.observe` 覆盖不可见历史。
+- Tiny 和 Windows OCR 都可能产生字符误识别，匹配词框不保证文字绝对正确；`role_hint` 只是左右几何提示，不是已确认的发送者身份。完整历史采集需要上层脚本用滚动、身份复核和去重循环完成；CLI 不承诺一次 `messages.observe` 覆盖不可见历史。
 - activity overlay 与稳定状态面板都是用户提示而非隔离桌面；控制边框表示最近 2 秒内有操作而不等同于 lease，面板在连续请求之间保留最近状态，取证时会短暂隐藏提示层，系统重启、显示器变化和前台权限失败仍按 best-effort 清理并在结果中报告。`actions.batch` 不是事务；`BATCH_OUTCOME_UNKNOWN` 表示变更可能已经发生，禁止宿主自动整批重试，必须重新观察并由上层决定恢复动作。需要控制安全桌面、高完整性窗口或无人值守服务会话时停止；不得把普通用户交互式桌面的成功外推到这些环境。

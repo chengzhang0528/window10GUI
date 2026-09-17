@@ -13,4 +13,11 @@
     <InvariantGlobalization>true</InvariantGlobalization>
     <IsPublishable>true</IsPublishable>
   </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Sdcb.SimdPaddleOCR" Version="1.3.0" />
+    <PackageReference Include="Sdcb.SimdPaddleOCR.Models.ChineseV6Tiny" Version="1.0.0" />
+    <Compile Remove="tests/**/*.cs" />
+    <InternalsVisibleTo Include="WindowsAgent.Ocr.Tests" />
+    <None Update="licenses/*.txt" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
 </Project>
