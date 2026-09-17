@@ -25,6 +25,7 @@ Depends On:
 - 涉及代码时继续读取 [源码根入口](../../../src/WindowsAgent.Cli/AGENTS.md)、目标类型和测试夹具；先用 `rg` 查现有实现。
 - 人类构建、接入和本地验证入口位于 [Windows Agent CLI 开发与验证](../../../src/WindowsAgent.Cli/README.md)。
 - 已获授权的本地便携目录更新与回退使用 [本地更新 Runbook](RUNBOOK_LOCAL_UPDATE.md)；不得重建或替换已固定制品，不发布远端二进制。
+- 已获授权的公开二进制发布使用 [OSS 发布 Runbook](RUNBOOK_OSS_PUBLICATION.md)；只接受已固定的本地文件、对象键、字节数和 SHA-256，不构建或替换制品。
 - Agent 使用方法由仓库 Skill 提供：`deskpilot-core` 负责通用桌面执行，`deskpilot-browser` 负责 Chrome，`deskpilot-messaging` 负责跨应用桌面消息采集与回复编排，`deskpilot-testing` 仅在明确测试任务时加载；具体应用业务规则仍留在上层宿主。
 
 ## 项目边界

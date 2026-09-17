@@ -20,6 +20,7 @@ Depends On:
 | `src/WindowsAgent.Cli/` | Windows Agent CLI 源码根、源码级入口和运行说明 | 项目治理规则、测试截图和发布制品 |
 | `src/DeskPilot.Flow/` | 基于公开 CLI 的宿主结构化流程适配、检查与接管桥接及定向测试 | XRain 源码、业务服务、自研 DSL、测试管理平台 |
 | `dsh-plugin/` | 独立版本的 dsh 薄插件、固定便携资产准备、宿主传输适配与定向测试 | CLI 二进制、宿主源码、用户 profile、node_modules 和发布凭据 |
+| `deployment/` | DeskPilot 固定 OSS 制品发布入口、定向测试与非秘密发布元数据 | 发布凭据、临时制品、用户数据和二进制副本 |
 | `test-fixtures/` | Development 定向验证所需的确定性本地页面 | 产品源码、客户数据和外部服务依赖 |
 | `artifacts/` | 本地验证生成物；默认被 Git 忽略 | 正式发布制品、秘密和长期事实 |
 
@@ -36,6 +37,7 @@ Depends On:
 - `项目/项目_windows-agent-cli/CURRENT_DESIGN.md` -> `CurrentDesign`
 - `项目/项目_windows-agent-cli/DECISION_STRUCTURED_FLOW.md` -> `Decision`
 - `项目/项目_windows-agent-cli/RUNBOOK_LOCAL_UPDATE.md` -> `Runbook`
+- `项目/项目_windows-agent-cli/RUNBOOK_OSS_PUBLICATION.md` -> `Runbook`
 - `项目/项目_windows-agent-cli/推进中/` -> `ChangePlan,DeploymentPlan,Issue`
 
 首次出现有可靠依据的未承诺结果时，在本文件同一改动中声明 `WORK_CANDIDATES.md -> WorkInventory`；首次出现实际工作空间级设计、决策、运行或活动事实时，也在同一改动中声明其精确位置与 Kind。
