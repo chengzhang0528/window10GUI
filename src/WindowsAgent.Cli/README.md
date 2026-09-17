@@ -33,7 +33,7 @@ dotnet build src\WindowsAgent.Cli\WindowsAgent.Cli.csproj --no-restore
 dotnet publish src\WindowsAgent.Cli\WindowsAgent.Cli.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true
 ```
 
-自包含发布会下载 `win-x64` runtime pack；本机当前只验证了 framework-dependent 的 `build`，发布机需具备网络或预缓存该 runtime pack。
+自包含发布会下载 `win-x64` runtime pack；发布机需具备网络或预缓存该 runtime pack。要生成包含相对路径 Skills 和说明的便携目录，运行 `node src/WindowsAgent.Cli/build-portable.mjs --output <空目录>`。脚本拒绝非空目标，先生成并验证候选，再替换分发目录；不要覆盖正在使用的二进制。
 
 ## CLI 契约
 
@@ -76,7 +76,9 @@ $requests -join "`n" | src\WindowsAgent.Cli\bin\Debug\net10.0-windows10.0.19041.
 
 ### 国内网络下的全自动 Chrome 页面操作
 
-`chrome.ensure` 默认先连接本机已有 CDP；没有端点时由 GUI 自动准备当前 Chrome 的 CDP 启动，失败后自动启动受控 profile，不要求用户安装扩展或打开 DevTools。受控 Chrome 使用动态非零 loopback 调试端口并把端点记录在受控 profile，避免固定端口冲突，也避免 `--remote-debugging-port=0` 令 Chromium 暴露 `navigator.webdriver=true`。页面访问仍由 Chrome 使用用户本机网络完成，CLI 只与 `127.0.0.1` 通信。`profile_mode=managed` 可显式选择不触碰当前 Chrome，`profile_mode=current` 要求同一用户 profile 接管成功。
+`chrome.ensure` 默认先连接本机已有 CDP；没有端点时启动受控 profile，不关闭已有 Chrome。受控 Chrome 使用动态非零 loopback 调试端口并记录端点，不要求插件或 DevTools。`profile_mode=managed` 只复用受控 profile 的端点；`current` 不会替用户关闭运行中的 Chrome。显式 endpoint/port 只连接该目标，失败不改连其他实例。失败详情 `attempts` 给出 version、targets、websocket_or_initialization 阶段与错误码。操作步骤见 [连接与恢复](../../.agents/skills/deskpilot-browser/references/connection-and-recovery.md)。
+
+关闭 CLI 会话会等待 helper 退出，必要时只终止 helper，不终止其浏览器子树。外部宿主可能有自己的子进程回收规则；在 DSH 等宿主中使用支持跨工具调用的持久会话，保留 stdin 和真实作业 ID，跨调用后核验 endpoint。`interaction.end` 只结束 lease，`close`/EOF 结束 CLI，均不是关闭浏览器。已授权的演示快捷登录可由 Agent 点击并核验；密码、OTP 和风控验证交给用户。
 
 每个 `chrome.ensure`、`chrome.attach` 和页面动作结果都返回 `target_id`、`window` 与 `window_binding`。GUI fallback 必须复用这个 `window.window_id`；不要从 `windows.find --process chrome` 的第一个结果猜主窗口，因为翻译提示、恢复气泡也可能是独立 Chrome 顶层窗口。已有 CDP 包含多个页面时，先 `chrome.targets`，再按已核验的 URL/标题用精确 `target_id` 调 `chrome.attach`。
 

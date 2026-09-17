@@ -189,9 +189,10 @@ session
 
 ## 当前限制与停止边界
 
-- 本机只有 .NET SDK 10.0.302，因此工程目标是 `net10.0-windows10.0.19041.0`；framework-dependent 可执行文件已验证。自包含发布需要先获取 `Microsoft.WindowsDesktop.App.Runtime.win-x64` runtime pack，本机尚未形成发布证据。
+- 工程目标是 `net10.0-windows10.0.19041.0`；自包含 Windows x64 便携包由源码根的 `build-portable.mjs` 生成，包含 CLI、相对路径 Skill、运行文档与可选 Flow 宿主。首次构建需要网络或已缓存的 .NET runtime pack，使用核心 CLI 无需目标机另装 .NET。
 - Chrome 最小化时通常不暴露网页 UIA 子树，必须先恢复并置前台；部分自绘网页仍需键盘/坐标 fallback。
-- 普通 Chrome 若没有远程调试端点，`profile_mode=auto` 会由 GUI 优雅退出并尝试同一用户目录重启 CDP；失败后切换独立受控 profile。`managed` 模式才保证不触碰现有标签页。自动重启仍受 Chrome 版本策略、profile 锁和未保存页面影响，结果通过结构化错误报告。
+- `profile_mode=auto` 发现已有 CDP 后复用，否则启动独立受控 profile；不会关闭普通 Chrome。`current` 仅在没有运行中 Chrome 时尝试当前用户目录启动。精确 endpoint/port 失败不启动其他实例，`TryAttach` 保留有界的分阶段失败详情。
+- `HostClient.Dispose` 收到 close 响应后等待最多 3 秒退出，避免将响应已完成误判为进程已退出；必要时仅终止 helper。Chrome 正常情况下保留供后续连接。DSH 等外部宿主的作业回收由宿主负责，使用方法见浏览器 Skill 的连接与恢复说明，不能把正常 CLI 退出验证外推为任意沙箱下的跨调用存活保证。
 - CDP 页面动作适合 DOM 可访问的页面；跨域 iframe、浏览器内部页和需要真实用户手势的特殊控件可能仍需 UIA/SendInput 步骤。所有页面等待都受 `timeout_ms` 约束，失败必须按错误码重新观察。
 - `PrintWindow/GDI` 不是 GPU、自绘、遮挡或 popup 场景的完整截图方案；前台可信屏幕拷贝要求目标关系和采样归属全部通过，后台不满足时会明确失败。WGC 与 Vision 属于后续独立能力。当前也不提供应用启动、拖拽、通用图像理解、应用语义消息解析、原生应用 adapter、安装器、签名、更新或日志审计流水。
 - Windows 离线 OCR 会产生字符误识别，`role_hint` 只是左右几何提示，不是已确认的发送者身份。完整历史采集需要上层脚本用滚动、身份复核和去重循环完成；CLI 不承诺一次 `messages.observe` 覆盖不可见历史。

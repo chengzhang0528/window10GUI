@@ -9,6 +9,10 @@ Use this skill for any DeskPilot desktop operation. Product boundaries and the c
 
 ## Operating method
 
+Keep one persistent `exec --stdin --format ndjson` process for a task. The calling host must keep its stdin open between model turns. In a host that reclaims foreground-tool descendants, use its supported persistent/background job for this process and retain the returned job ID; do not invent a job ID or repeatedly restart Chrome. `interaction.end` releases the activity lease; `close`/EOF ends the CLI session. Neither is a browser-close command. The CLI cannot prevent an outer sandbox/job owner from terminating its child processes. Recheck the endpoint after a tool/job transition before claiming that the browser will remain available.
+
+Use public response IDs only within their owning session. After restarting the CLI, reconnect by endpoint and reacquire target/window/observation IDs. The executable is resolved from the supplied tool directory, not a guessed source checkout or global PATH.
+
 1. Start the public process with `win-agent.exe exec --stdin --format ndjson` and send one JSON request per line. Run `doctor` first when the environment is unknown.
 2. Send multiple related, known actions and their result checks in one `workflow.run`/`actions.batch` or one host-code call over persistent NDJSON. Keep waits inside that call and return to the model when new observation is needed to choose the next action. A full persisted scenario is not required. Hold `interaction.begin` until `interaction.end`/`interaction.cancel` when a group spans requests; this reuses the overlay and foreground lifecycle but does not by itself reduce model round trips. If the user wants to watch the run, pass `show_action_trace=true`; DeskPilot draws a synthetic pointer/target highlight without moving the real cursor. Coordinate fallback may briefly use the OS cursor to deliver input, then restores its prior position best-effort.
 3. Resolve a target with `windows.find` or `observe`, then use the returned session-scoped IDs. Never pass HWND, COM, or UIA objects to the host.

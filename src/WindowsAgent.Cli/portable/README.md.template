@@ -1,0 +1,17 @@
+# DeskPilot 便携包
+
+复制整个目录后，让智能体读取同目录的 `AGENTS.md`，即可使用本地桌面能力。目录可改名或移动，无需源码和 .NET 安装。智能体宿主必须支持本地进程与标准输入输出；仅提供目录不会使不支持本地工具的模型获得执行能力。
+
+在本目录打开终端执行：
+
+```powershell
+.\win-agent.cmd doctor
+```
+
+成功结果为 `ok=true`。Chrome 未连接时 doctor 的 Chrome 项可以为 degraded；需要操作浏览器时由 chrome.ensure 建立连接。
+
+程序位于 `bin/`，Skills 位于 `.agents/skills/`，公开协议说明位于 `docs/CLI_REFERENCE.md`。Chrome 使用分支与失败处理位于 `.agents/skills/deskpilot-browser/references/connection-and-recovery.md`。
+
+核心 CLI 适用于 Windows 10 build 19041+、x64、已登录且可交互的桌面。可选结构化流程 `run-flow.cmd` 使用系统 Node.js；消息辅助脚本使用系统 Python。Chrome 需由目标机器提供。
+
+所有资源路径都相对本目录。Chrome profile 仍由 Windows 当前用户目录管理，登录态不会随此包分发。宿主可能回收工具子进程，持久会话的配置与浏览器存活核验见连接与恢复说明。

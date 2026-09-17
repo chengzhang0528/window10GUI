@@ -1,0 +1,16 @@
+# DeskPilot 运行入口
+
+本文件所在目录是工具根目录。先读取 `.agents/skills/deskpilot-core/SKILL.md`；操作 Chrome 再读取 `.agents/skills/deskpilot-browser/SKILL.md` 及其连接与恢复说明。
+
+所有包内相对路径从本文件或链接所在文件解析，不从调用方项目目录猜测。程序为 `bin/win-agent.exe`。不需要查找源码、编译或全局安装 Skill。
+
+从工具根目录诊断：`./bin/win-agent.exe doctor`。
+连续任务启动：`./bin/win-agent.exe exec --stdin --format ndjson`。
+
+宿主需要保持该进程及 stdin 打开，记住它实际返回的会话 ID。宿主若回收前台工具的子进程，使用其持久作业能力承载 CLI。一次 pipe 输入结束后会关闭 CLI，旧 window_id/observation_id 不能带到下一个 CLI 进程。
+
+默认连接使用 `profile_mode=auto`；指定真实 endpoint 时使用 `auto_start=false`。不要自行启动反复更换端口的 Chrome，也不要关闭全部 Chrome 来恢复连接。
+
+运行文档位于 `docs/CLI_REFERENCE.md`。可选 `flow/run.mjs` 需要 Node.js，消息辅助脚本需要 Python。按实际任务读取对应 Skill，不预先运行演示场景；场景存在不代表已获操作该站点的授权。
+
+登录暂停先区分已有授权的演示快捷登录与用户凭据／验证。前者核验角色后可继续，后者保留页面等待用户。交付汇报只包含已核验结果、真实阻断和下一步，不将推测归因为已确认缺陷。

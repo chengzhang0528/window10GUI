@@ -467,7 +467,9 @@ internal sealed class HostClient : IDisposable
                     _ = SendRaw("{\"id\":\"close\",\"method\":\"close\",\"params\":{}}" );
                 }
                 catch { }
-                if (!_process.HasExited)
+                // A close response precedes the helper's final shutdown.
+                // Allow it to exit before resorting to termination.
+                if (!_process.WaitForExit(3000))
                 {
                     TryKill();
                 }
@@ -536,7 +538,9 @@ internal sealed class HostClient : IDisposable
     {
         try
         {
-            if (!_process.HasExited) _process.Kill(entireProcessTree: true);
+            // Chrome is an interactive application which may outlive this
+            // transport. Terminate only the helper owned by this client.
+            if (!_process.HasExited) _process.Kill(entireProcessTree: false);
         }
         catch { }
     }

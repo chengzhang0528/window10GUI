@@ -9,7 +9,9 @@ Use this skill only when the target is a Chrome page. Apply [deskpilot-core](../
 
 ## Browser loop
 
-1. Call `chrome.ensure`. It may attach to a local endpoint or start a managed profile on a dynamic non-zero loopback port; it must not require an extension or a manual DevTools step. Treat its `target_id`, `window`, and `window_binding` as the selected browser context, and require `window_binding.verified=true` before GUI fallback.
+For startup, session ownership, login decisions, or connection failures, first read [references/connection-and-recovery.md](references/connection-and-recovery.md). It contains the executable decision sequence and request shapes; use those before constructing an ad-hoc Chrome launch command.
+
+1. Call `chrome.ensure`. Default `auto` attaches to an existing endpoint or starts a managed profile; it never closes current Chrome windows. Use `managed` to select the dedicated profile, or an explicit `endpoint` with `auto_start=false` to reconnect to an observed endpoint. `current` cannot restart an already running Chrome. Treat `target_id`, `window`, and `window_binding` as the selected browser context, and require `window_binding.verified=true` before GUI fallback.
 2. When an existing endpoint has multiple page targets, call `chrome.targets`, choose by URL/title evidence, then call `chrome.attach` with the exact `target_id`. Never infer the page by taking the first result from `windows.find --process chrome`: translation prompts and browser bubbles are also Chrome top-level windows.
 3. Navigate with a bounded `timeout_ms`. Treat `domcontentloaded`/`load` as technical readiness, not proof that the page is usable. The default may continue when the page exposes actionable content while `readyState` is still `loading`; use `ready_selector`/`ready_expression` for the actual scenario predicate.
 4. Wait for the page's semantic condition with `chrome.wait` using a selector and, when needed, an expression for visibility, enabled state, text, or data. Selector presence alone can match a hidden placeholder.

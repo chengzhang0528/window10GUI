@@ -34,6 +34,7 @@ internal sealed class ChromeCdpProvider : IDisposable
     private string? _profileMode;
     private string? _managedProfileDir;
     private Process? _managedProcess;
+    private readonly List<object> _attachAttempts = new();
     private readonly HashSet<string> _inflightRequests = new(StringComparer.Ordinal);
     private readonly List<DocumentNavigationEvent> _documentNavigations = new();
     private int _commandId;
@@ -72,11 +73,7 @@ internal sealed class ChromeCdpProvider : IDisposable
     internal object Ensure(JsonElement parameters)
     {
         ThrowIfDisposed();
-        if (IsConnected)
-        {
-            return Describe();
-        }
-
+        _attachAttempts.Clear();
         var profileMode = (GetOptionalString(parameters, "profile_mode", "profile-mode") ?? "auto").Trim().ToLowerInvariant();
         if (profileMode is not ("auto" or "current" or "managed"))
         {
@@ -85,10 +82,21 @@ internal sealed class ChromeCdpProvider : IDisposable
         var requestedEndpoint = GetOptionalString(parameters, "endpoint", "cdp_endpoint", "cdp-endpoint");
         var requestedPort = GetOptionalPort(parameters, "port", "remote_debugging_port", "remote-debugging-port");
         var hasExplicitEndpoint = requestedEndpoint is not null || requestedPort is not null;
+        var exactEndpoint = requestedEndpoint?.TrimEnd('/') ?? (requestedPort is int port ? $"http://127.0.0.1:{port}" : null);
+        if (IsConnected)
+        {
+            if (!hasExplicitEndpoint || string.Equals(_endpoint, exactEndpoint, StringComparison.OrdinalIgnoreCase)) return Describe();
+            Disconnect();
+        }
         if (hasExplicitEndpoint && TryAttach(requestedEndpoint, requestedPort))
         {
             _profileMode = _managedProcess is null ? "existing_debug_session" : "managed";
             return Describe();
+        }
+        if (hasExplicitEndpoint)
+        {
+            throw new AgentException("CHROME_CDP_UNAVAILABLE", "The specified CDP endpoint could not be attached.", true,
+                new { endpoint = requestedEndpoint, port = requestedPort, attempts = _attachAttempts.ToArray() });
         }
 
         if (!hasExplicitEndpoint && profileMode is not "managed" && TryAttach(null, null))
@@ -115,11 +123,12 @@ internal sealed class ChromeCdpProvider : IDisposable
                 "CHROME_CDP_UNAVAILABLE",
                 "No Chrome DevTools endpoint was found. Set auto_start=true to let the CLI start a managed Chrome instance.",
                 true,
-                new { endpoint = requestedEndpoint, port = requestedPort });
+                new { endpoint = requestedEndpoint, port = requestedPort, profile_mode = profileMode, attempts = _attachAttempts.ToArray() });
         }
 
         var startupTimeout = GetTimeout(parameters, 15000);
-        if (profileMode is not "managed" && TryStartCurrentProfile(parameters, requestedPort, startupTimeout))
+        // Current-profile startup is explicit; auto uses a managed profile.
+        if (profileMode == "current" && TryStartCurrentProfile(parameters, requestedPort, startupTimeout))
         {
             _profileMode = "current";
             return Describe();
@@ -139,7 +148,7 @@ internal sealed class ChromeCdpProvider : IDisposable
         if (!IsConnected)
         {
             throw new AgentException("CHROME_CDP_UNAVAILABLE", "Chrome started but its DevTools endpoint did not become available.", true,
-                new { endpoint = _endpoint, process_id = _managedProcess?.Id });
+                new { endpoint = _endpoint, process_id = _managedProcess?.Id, attempts = _attachAttempts.ToArray() });
         }
 
         _profileMode = "managed";
@@ -155,8 +164,9 @@ internal sealed class ChromeCdpProvider : IDisposable
         var probeTimeout = Math.Min(startupTimeout, 8000);
         var profile = GetCurrentUserDataDir(parameters);
         if (string.IsNullOrWhiteSpace(profile)) return false;
-        var running = GetRunningChromeProcesses();
-        if (running.Count > 0 && !RequestCloseChrome(running, probeTimeout)) return false;
+        // Never close all Chrome windows to obtain CDP. A caller requesting
+        // current-profile startup must first arrange for Chrome to be closed.
+        if (GetRunningChromeProcesses().Count > 0) return false;
 
         try
         {
@@ -203,31 +213,6 @@ internal sealed class ChromeCdpProvider : IDisposable
     {
         try { return Process.GetProcessesByName("chrome").ToList(); }
         catch { return new List<Process>(); }
-    }
-
-    private static bool RequestCloseChrome(IReadOnlyList<Process> processes, int timeout)
-    {
-        var ids = processes.Select(process =>
-        {
-            try { return process.Id; } catch { return 0; }
-        }).Where(id => id > 0).ToHashSet();
-        var windows = NativeMethods.EnumerateTopLevelWindows()
-            .Where(handle => ids.Contains((int)NativeMethods.GetProcessId(handle)))
-            .ToArray();
-        foreach (var window in windows) _ = NativeMethods.RequestCloseWindow(window);
-        var deadline = Stopwatch.StartNew();
-        while (deadline.ElapsedMilliseconds < Math.Min(timeout, 10000))
-        {
-            if (!GetRunningChromeProcesses().Any(process =>
-            {
-                try { return ids.Contains(process.Id); } catch { return false; }
-            })) return true;
-            Thread.Sleep(100);
-        }
-        return !GetRunningChromeProcesses().Any(process =>
-        {
-            try { return ids.Contains(process.Id); } catch { return false; }
-        });
     }
 
     internal object Targets(JsonElement parameters)
@@ -1066,18 +1051,26 @@ internal sealed class ChromeCdpProvider : IDisposable
     {
         foreach (var candidate in EnumerateEndpoints(endpoint, requestedPort))
         {
+            var stage = "version";
             try
             {
                 var version = GetJson(candidate + "/json/version");
                 if (!version.TryGetProperty("webSocketDebuggerUrl", out var websocketElement) ||
-                    websocketElement.ValueKind != JsonValueKind.String || string.IsNullOrWhiteSpace(websocketElement.GetString())) continue;
+                    websocketElement.ValueKind != JsonValueKind.String || string.IsNullOrWhiteSpace(websocketElement.GetString()))
+                    throw new AgentException("CDP_VERSION_INVALID", "Missing browser WebSocket URL.", true);
+                stage = "targets";
                 var target = GetTargets(candidate).FirstOrDefault(item => item.Type == "page");
-                if (target is null || string.IsNullOrWhiteSpace(target.WebSocketUrl)) continue;
+                if (target is null || string.IsNullOrWhiteSpace(target.WebSocketUrl))
+                    throw new AgentException("CDP_PAGE_TARGET_MISSING", "No attachable page target.", true);
+                stage = "websocket_or_initialization";
                 Connect(candidate, target);
                 return true;
             }
-            catch
+            catch (Exception ex)
             {
+                if (_attachAttempts.Count < 32)
+                    _attachAttempts.Add(new { endpoint = candidate, stage,
+                        error_code = ex is AgentException agent ? agent.Code : ex.GetType().Name });
                 Disconnect();
             }
         }
