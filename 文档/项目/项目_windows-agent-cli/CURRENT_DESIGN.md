@@ -94,10 +94,7 @@ CLI 前台进程只负责参数、NDJSON 转发和统一响应；所有 Windows 
 
 本机安装的 OpenAI Codex/ChatGPT Windows 包采用 Electron/Chromium 外壳，并包含独立的 Windows computer-use helper。对其已安装资源的只读检查确认了这些封装思想：
 
-- Windows 能力在独立 helper 进程中运行，父进程用隐藏 stdio 管道发送逐行 JSON。
-- 请求使用 ID 关联结果，并有超时、helper 退出、父 PID 联动和进程清理。
-- client 复用同一 transport 保存窗口和观察状态；动作前校验窗口/截图状态，动作后重新观察。
-- 高影响应用访问可以产生 approval 请求，而不是由底层自动越权。
+Windows 能力在独立 helper 进程中运行，父进程用隐藏 stdio 管道发送逐行 JSON；请求使用 ID 关联结果，并有超时、helper 退出、父 PID 联动和进程清理。client 复用同一 transport 保存窗口和观察状态，动作前校验窗口/截图状态、动作后重新观察；高影响应用访问可以产生 approval 请求，而不是由底层自动越权。
 
 本项目只借鉴这些可验证的边界和协议思想，没有依赖、复制或调用安装包内的私有 helper。公开协议和实现由本仓库独立维护。
 
@@ -188,6 +185,9 @@ session
 Windows OCR 原实现曾在 Windows 10 build 19045、x64、Chrome 151.0.7922.173 环境完成 Chrome 表单、微信 Qt 身份与回复回读及 ChatGPT 身份验证。Tiny 接入的定向证据是隔离桌面 fixture 经公开 CLI 完成可信截图、区域读取、身份拒绝、可选词定位与清理；不能把旧引擎场景结果或合成数据准确率当成新引擎的真实聊天业务验收。场景选择器、消息统计和回复策略均未进入 CLI 核心。
 
 ## 当前限制与停止边界
+- dsh 接入位于 `dsh-plugin/`，同仓独立 npm 版本与 MIT 许可，不包含 CLI 二进制，不推导 CLI 本体许可。插件默认禁用，四工具、六 Skills 与可选双宿主命令通过宿主注册表贡献；进程由宿主 subprocess 服务管理。正式二进制通道为既定 OSS，目前没有默认公开资产配置，npm 发布、上传与已有安装更新不由 Development 自动执行。
+- 原生 stderr 附加 `DESKPILOT_BOOTSTRAP ` JSON 行，固定 `version:1`、`code`、`exit_code`；code 为 `DESKPILOT_RUNTIME_PREPARING`、`DESKPILOT_RUNTIME_READY`、`DESKPILOT_RUNTIME_SETUP_FAILED`。dsh 每会话先发无副作用 capabilities 探测，确认准备后暂停启动预算并启用默认 900000 ms 的 setupTimeoutMs，就绪后恢复剩余预算，业务与 doctor 分别计时。旧入口、普通 argv/NDJSON 与 Flow 保持兼容。准备失败／超时、业务超时、退出无响应分别报错，stderr 最多保留 4096 字节尾部并标记截断。取消准备仅关闭输入，保留进程引用到退出；同一会话关闭完成前不另启，宿主最终回收策略仍由宿主拥有。
+- 插件优先复用相邻或显式公开入口，明确 command 缺失不改写；只拒绝可辨认便携包的内部 apphost。首次使用才按部署配置 asset 的 version/platform/url/bytes/sha256 获取完整 ZIP：流式大小摘要校验、有界安全解包、完整文件清单和许可校验后原子保留版本缓存，再以 CLI 握手判断可用性。默认缓存为当前用户 LocalAppData 的 DeskPilot/releases；失败只清理本次唯一临时目录。无最新版本搜索、备用源、传输白名单或已有安装覆盖；大小按完整 ZIP、解包目录与额外 .NET 下载分开。定向测试在插件 test/ 与 CLI bootstrap.test.mjs。
 - 工程目标是 `net10.0-windows10.0.19041.0`；默认 Windows x64 便携包由源码根的 `build-portable.mjs` 生成。约 20 KB 原生入口保持 `bin/win-agent.exe` 调用路径，内部 `bin/app/win-agent.exe` 依赖系统 .NET 10 Desktop Runtime x64；相对路径 Skill、运行文档与可选 Flow 宿主随包交付。
 - 原生入口让 apphost 直接解析运行时，只有业务 Main 尚未执行的缺少 hostfxr／framework 状态才调用 Windows PowerShell 准备并最多重启一次。准备脚本串行化并发安装，复核兼容运行时，必要时从微软官方固定地址下载安装程序、核对 SHA-512 与签名并交给 Windows UAC／官方安装器，最后无副作用 probe。成功后不保存跨机器标记，后续调用不执行预检测或联网；安装后的共享运行时由微软／系统管理。下载失败、UAC 取消、安装失败均终止本次启动，应用自身错误不触发安装或重放。
 - Chrome 最小化时通常不暴露网页 UIA 子树，必须先恢复并置前台；部分自绘网页仍需键盘/坐标 fallback。

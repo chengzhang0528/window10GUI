@@ -30,6 +30,7 @@ Depends On:
 ## 项目边界
 
 - 源码根：`src/WindowsAgent.Cli/`；宿主适配根：`src/DeskPilot.Flow/`。
+- dsh 插件源码根：`dsh-plugin/`；修改启动、stderr 自举事件或便携分发时，同时核验该消费者及其定向测试。
 - Development 验证夹具：`test-fixtures/agent-form.html`
 - 默认本地生成物：`artifacts/`，不作为发布制品或正式证据所有者。
 - 本项目面向已登录用户的交互式 Windows 10 桌面；不得把服务会话、锁屏、UAC 绕过或远程无人值守能力推断为已支持。

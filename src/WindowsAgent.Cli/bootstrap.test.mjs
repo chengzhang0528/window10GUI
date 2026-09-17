@@ -34,6 +34,11 @@ for (const missing of ['80008096', '80008083']) {
     assert.equal(first.status, 0, first.stderr);
     assert.equal(first.stdout.replaceAll('\r\n', '\n'), args.map(arg => 'arg:' + arg + '\n').join('') + 'queued request\n');
     assert.match(first.stderr, /setup output must go to stderr/);
+    const events = first.stderr.split(/\r?\n/).filter(line => line.startsWith('DESKPILOT_BOOTSTRAP ')).map(line => JSON.parse(line.slice('DESKPILOT_BOOTSTRAP '.length)));
+    assert.deepEqual(events, [
+      { version: 1, code: 'DESKPILOT_RUNTIME_PREPARING', exit_code: 0 },
+      { version: 1, code: 'DESKPILOT_RUNTIME_READY', exit_code: 0 },
+    ]);
     assert.equal(f.calls(), 2);
     const second = f.run(args);
     assert.equal(second.status, 0, second.stderr);
@@ -50,6 +55,7 @@ test('application failure never invokes setup or replays an action', t => {
   const f = fixture(t);
   const result = f.run(['--business-failure']);
   assert.equal(result.status, 7);
+  assert.doesNotMatch(result.stderr, /DESKPILOT_BOOTSTRAP/);
   assert.equal(f.calls(), 1);
   assert.equal(existsSync(f.env.DESKPILOT_TEST_SETUP_COUNT), false);
 });
@@ -58,6 +64,8 @@ test('failed or declined setup does not start the application again', t => {
   const result = f.run([], { DESKPILOT_TEST_SETUP_FAIL: '1' });
   assert.equal(result.status, 20);
   assert.equal(result.stdout, '');
+  assert.match(result.stderr, /"code":"DESKPILOT_RUNTIME_SETUP_FAILED","exit_code":20/);
+  assert.doesNotMatch(result.stderr, /DESKPILOT_RUNTIME_READY/);
   assert.equal(f.calls(), 1);
   assert.equal(existsSync(f.env.DESKPILOT_TEST_MARKER), false);
 });

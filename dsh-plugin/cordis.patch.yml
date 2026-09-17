@@ -1,0 +1,11 @@
+# Installation does not authorize desktop control. Enable the row in the profile's user patch.
+- insert:
+    - id: deskpilot
+      name: dsh-plugin-deskpilot
+      disabled: true
+      config:
+        timeoutMs: 130000
+        doctorTimeoutMs: 60000
+        setupTimeoutMs: 900000
+        maxLineBytes: 8388608
+        registerSkills: true

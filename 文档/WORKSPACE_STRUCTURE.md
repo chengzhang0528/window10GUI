@@ -19,6 +19,7 @@ Depends On:
 | `人类-文档/` | 开发者主动使用的任务导航 | 正式契约、智能体路由、源码事实副本和秘密 |
 | `src/WindowsAgent.Cli/` | Windows Agent CLI 源码根、源码级入口和运行说明 | 项目治理规则、测试截图和发布制品 |
 | `src/DeskPilot.Flow/` | 基于公开 CLI 的宿主结构化流程适配、检查与接管桥接及定向测试 | XRain 源码、业务服务、自研 DSL、测试管理平台 |
+| `dsh-plugin/` | 独立版本的 dsh 薄插件、固定便携资产准备、宿主传输适配与定向测试 | CLI 二进制、宿主源码、用户 profile、node_modules 和发布凭据 |
 | `test-fixtures/` | Development 定向验证所需的确定性本地页面 | 产品源码、客户数据和外部服务依赖 |
 | `artifacts/` | 本地验证生成物；默认被 Git 忽略 | 正式发布制品、秘密和长期事实 |
 

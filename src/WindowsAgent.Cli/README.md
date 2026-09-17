@@ -37,6 +37,8 @@ dotnet publish src\WindowsAgent.Cli\WindowsAgent.Cli.csproj -c Release -r win-x6
 
 原生入口先直接启动应用，只有 apphost 的缺少 hostfxr／框架错误才调用随包 Windows PowerShell 安装脚本。它使用微软官方 Desktop Runtime x64 安装程序、固定 SHA-512 和 Authenticode 校验，必要时请求 UAC，安装后用无桌面副作用的 `--runtime-probe` 核验。已有兼容 .NET 10 Desktop Runtime 会直接复用；普通启动无额外脚本、缓存标记或网络检测。安装失败不会重放业务，运行时以后被卸载会在启动前再次触发准备。下载描述由 `portable/runtime-download.json` 维护。
 
+宿主可解析 stderr 的 `DESKPILOT_BOOTSTRAP ` JSON 行区分准备、成功与失败；stdout 仍只包含 CLI 响应。dsh 适配位于仓库根的 `dsh-plugin/`，独立计量安装等待与业务请求，不把准备期间当作普通命令超时。
+
 ## CLI 契约
 
 单次调用适合诊断：

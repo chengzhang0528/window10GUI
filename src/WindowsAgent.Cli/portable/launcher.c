@@ -14,6 +14,12 @@
 #define HOSTFXR_MISSING 0x80008083u
 #define MAX_COMMAND 32768
 
+// Stable, additive stderr records; stdout remains exclusively the CLI protocol.
+static void runtime_event(const char *code, DWORD exit_code) {
+    fprintf(stderr, "DESKPILOT_BOOTSTRAP {\"version\":1,\"code\":\"%s\",\"exit_code\":%lu}\n", code, exit_code);
+    fflush(stderr);
+}
+
 static int append_arg(wchar_t *command, const wchar_t *arg) {
     size_t used = wcslen(command), slashes = 0;
     // Worst case: every character needs two backslashes plus delimiters.
@@ -90,8 +96,13 @@ int wmain(int argc, wchar_t **argv) {
         !append_arg(command, L"-NonInteractive") || !append_arg(command, L"-ExecutionPolicy") ||
         !append_arg(command, L"Bypass") || !append_arg(command, L"-File") || !append_arg(command, script)) return 20;
     fprintf(stderr, "DeskPilot: .NET 10 Desktop Runtime x64 is missing; preparing it from Microsoft. UAC may require user action.\n");
+    runtime_event("DESKPILOT_RUNTIME_PREPARING", 0);
     code = run(powershell, command, 1);
-    if (code != 0) return (int)code;
+    if (code != 0) {
+        runtime_event("DESKPILOT_RUNTIME_SETUP_FAILED", code);
+        return (int)code;
+    }
+    runtime_event("DESKPILOT_RUNTIME_READY", 0);
     command[0] = 0;
     if (!append_arg(command, inner)) return 20;
     for (int i = 1; i < argc; i++) if (!append_arg(command, argv[i])) return 20;
