@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "publishedAt": "2026-09-17",
+  "target": {
+    "host": "shared-public-assets.oss-cn-beijing.aliyuncs.com",
+    "prefix": "deskpilot/"
+  },
+  "source": {
+    "revision": "6947fa5f57d00f53c6fe80532a274b10559605cf"
+  },
+  "artifacts": [
+    {
+      "component": "dsh-plugin-deskpilot",
+      "version": "0.2.0",
+      "platform": "any",
+      "key": "deskpilot/dsh-plugin/releases/0.2.0/dsh-plugin-deskpilot-0.2.0.tgz",
+      "url": "https://shared-public-assets.oss-cn-beijing.aliyuncs.com/deskpilot/dsh-plugin/releases/0.2.0/dsh-plugin-deskpilot-0.2.0.tgz",
+      "bytes": 26251,
+      "sha256": "9fb23163012b872431c09880fbe8c54b94e8ef1d09d330c2190d8e9226758fe7"
+    },
+    {
+      "component": "deskpilot-cli-portable",
+      "version": "6947fa5",
+      "platform": "win-x64",
+      "key": "deskpilot/cli/releases/6947fa5/dsh-bootstrap-6947fa5.zip",
+      "url": "https://shared-public-assets.oss-cn-beijing.aliyuncs.com/deskpilot/cli/releases/6947fa5/dsh-bootstrap-6947fa5.zip",
+      "bytes": 13918926,
+      "sha256": "6f0a3949ca155bb5106bbe2f18e6cb777e8c8ff2c1eebeb063e662585a1c21ba"
+    }
+  ]
+}
