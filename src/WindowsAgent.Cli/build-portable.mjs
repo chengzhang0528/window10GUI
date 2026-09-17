@@ -10,12 +10,13 @@ if (process.argv.length !== 4 || process.argv[2] !== '--output') throw new Error
 const output = resolve(process.argv[3]);
 await mkdir(output, { recursive: true });
 if ((await readdir(output)).length) throw new Error('Output must be empty; preserve the existing portable package until the candidate passes.');
-function run(command, args) {
-  const result = spawnSync(command, args, { cwd: repo, encoding: 'utf8', windowsHide: true });
+function run(command, args, cwd = repo) {
+  const result = spawnSync(command, args, { cwd, encoding: 'utf8', windowsHide: true });
   if (result.status !== 0) throw new Error(result.error?.message ?? result.stderr + result.stdout);
   return result.stdout.trim();
 }
-run('dotnet', ['publish', join(source, 'WindowsAgent.Cli.csproj'), '-c', 'Release', '-r', 'win-x64', '--self-contained', 'true', '-p:PublishSingleFile=true', '-p:DebugType=None', '-p:DebugSymbols=false', '-o', join(output, 'bin')]);
+run('dotnet', ['publish', join(source, 'WindowsAgent.Cli.csproj'), '-c', 'Release', '-r', 'win-x64', '--self-contained', 'false', '-p:PublishSingleFile=true', '-p:DebugType=None', '-p:DebugSymbols=false', '-o', join(output, 'bin/app')]);
+run('gcc', ['-municode', '-Os', '-s', '-static', '-Wall', '-Wextra', join(source, 'portable/launcher.c'), '-o', 'win-agent.exe'], join(output, 'bin'));
 async function put(path, value) { await mkdir(dirname(join(output, path)), { recursive: true }); await writeFile(join(output, path), value); }
 async function copyText(from, to, transform = text => text) { await put(to, transform(await readFile(from, 'utf8'))); }
 async function files(root) {
@@ -28,6 +29,7 @@ async function files(root) {
   return result;
 }
 for (const name of ['AGENTS.md', 'README.md']) await copyText(join(source, 'portable', name + '.template'), name);
+for (const name of ['ensure-runtime.ps1', 'runtime-download.json']) await copyText(join(source, 'portable', name), 'bin/' + name);
 await put('win-agent.cmd', '@echo off\r\n"%~dp0bin\\win-agent.exe" %*\r\n');
 await put('run-flow.cmd', '@echo off\r\nnode "%~dp0flow\\run.mjs" %*\r\n');
 const skillRoot = join(repo, '.agents/skills');
@@ -59,7 +61,7 @@ for (const name of ['PRODUCT_CONTRACT.md', 'CURRENT_DESIGN.md', 'DECISION_STRUCT
     .replaceAll('src/DeskPilot.Flow/', 'flow/'));
 }
 await copyText(join(source, 'README.md'), 'docs/CLI_REFERENCE.md', text => text
-  .replace(/## Development：构建 CLI[\s\S]*?## CLI 契约/, '## CLI 契约\n\n本包已构建为自包含 Release。以下命令从包根目录执行。')
+  .replace(/## Development：构建 CLI[\s\S]*?## CLI 契约/, '## CLI 契约\n\n本包使用系统 .NET 10 Desktop Runtime x64，缺失时由原生入口准备。以下命令从包根目录执行。')
   .replace(/## Development：当前 Chrome 验证[\s\S]*/, '')
   .replaceAll('../../文档/项目/项目_windows-agent-cli/CURRENT_DESIGN.md', 'CURRENT_DESIGN.md')
   .replaceAll('../DeskPilot.Flow/README.md', '../flow/README.md')
@@ -94,5 +96,5 @@ for (const path of await files(output)) {
     await stat(target);
   }
 }
-await put('PACKAGE_MANIFEST.json', JSON.stringify({ source_revision: run('git', ['rev-parse', 'HEAD']), source_dirty: !!run('git', ['status', '--porcelain']), platform: 'win-x64', self_contained: true, files: checksums }, null, 2) + '\n');
+await put('PACKAGE_MANIFEST.json', JSON.stringify({ source_revision: run('git', ['rev-parse', 'HEAD']), source_dirty: !!run('git', ['status', '--porcelain']), platform: 'win-x64', self_contained: false, runtime: { framework: 'Microsoft.WindowsDesktop.App', minimum_version: '10.0.0', architecture: 'x64', setup: 'bin/ensure-runtime.ps1', download: 'bin/runtime-download.json' }, files: checksums }, null, 2) + '\n');
 console.log(JSON.stringify({ output, files: checksums.length + 1, bytes: checksums.reduce((sum, file) => sum + file.bytes, 0), links: 'passed' }));

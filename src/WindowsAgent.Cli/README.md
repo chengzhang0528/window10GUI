@@ -33,7 +33,9 @@ dotnet build src\WindowsAgent.Cli\WindowsAgent.Cli.csproj --no-restore
 dotnet publish src\WindowsAgent.Cli\WindowsAgent.Cli.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true
 ```
 
-自包含发布会下载 `win-x64` runtime pack；发布机需具备网络或预缓存该 runtime pack。要生成包含相对路径 Skills 和说明的便携目录，运行 `node src/WindowsAgent.Cli/build-portable.mjs --output <空目录>`。脚本拒绝非空目标，先生成并验证候选，再替换分发目录；不要覆盖正在使用的二进制。
+上面的自包含命令用于离线运行制品。默认便携包采用系统共享运行时：构建机另需 PATH 中的 MinGW-w64 `gcc`，执行 `node src/WindowsAgent.Cli/build-portable.mjs --output <空目录>`。它生成原生 `bin/win-agent.exe` 和 framework-dependent 的 `bin/app/win-agent.exe`，并携带相对路径 Skills。脚本拒绝非空目标，先验证候选，再替换分发目录；不要覆盖正在使用的二进制。
+
+原生入口先直接启动应用，只有 apphost 的缺少 hostfxr／框架错误才调用随包 Windows PowerShell 安装脚本。它使用微软官方 Desktop Runtime x64 安装程序、固定 SHA-512 和 Authenticode 校验，必要时请求 UAC，安装后用无桌面副作用的 `--runtime-probe` 核验。已有兼容 .NET 10 Desktop Runtime 会直接复用；普通启动无额外脚本、缓存标记或网络检测。安装失败不会重放业务，运行时以后被卸载会在启动前再次触发准备。下载描述由 `portable/runtime-download.json` 维护。
 
 ## CLI 契约
 

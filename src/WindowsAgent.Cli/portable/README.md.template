@@ -1,6 +1,6 @@
 # DeskPilot 便携包
 
-复制整个目录后，让智能体读取同目录的 `AGENTS.md`，即可使用本地桌面能力。目录可改名或移动，无需源码和 .NET 安装。智能体宿主必须支持本地进程与标准输入输出；仅提供目录不会使不支持本地工具的模型获得执行能力。
+复制整个目录后，让智能体读取同目录的 `AGENTS.md`，即可使用本地桌面能力。目录可改名或移动，无需源码。首次运行缺少 .NET 10 Desktop Runtime x64 时，程序从微软官方地址下载并安装，可能需要联网和确认 Windows UAC。已有兼容运行时则直接复用。智能体宿主必须支持本地进程与标准输入输出。
 
 在本目录打开终端执行：
 
@@ -11,6 +11,10 @@
 成功结果为 `ok=true`。Chrome 未连接时 doctor 的 Chrome 项可以为 degraded；需要操作浏览器时由 chrome.ensure 建立连接。
 
 程序位于 `bin/`，Skills 位于 `.agents/skills/`，公开协议说明位于 `docs/CLI_REFERENCE.md`。Chrome 使用分支与失败处理位于 `.agents/skills/deskpilot-browser/references/connection-and-recovery.md`。
+
+`bin/win-agent.exe` 是无需 .NET 的小型原生启动器，内部应用在 `bin/app/`。安装成功后每次直接启动，不执行额外版本扫描、PowerShell 或联网检查；运行时被卸载后，明确的缺失错误会再次触发准备。准备过程只输出到 stderr，原始 stdin 请求保持完整。下载或 UAC 失败时本次启动失败，可解决原因后重试。
+
+运行时安装由微软官方安装程序管理，不随工具文件夹移动；每台新机器独立准备。包内不携带“已安装”标记或运行时安装包。缺少运行时的机器不能首次离线启动。
 
 核心 CLI 适用于 Windows 10 build 19041+、x64、已登录且可交互的桌面。可选结构化流程 `run-flow.cmd` 使用系统 Node.js；消息辅助脚本使用系统 Python。Chrome 需由目标机器提供。
 

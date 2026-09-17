@@ -188,8 +188,8 @@ session
 本次最新实测环境是 Windows 10 build 19045、x64、Chrome 151.0.7922.173。除既有 Chrome 表单结果外，DeskPilot 在微信 Qt 窗口中识别到目标群聊身份并采集当前可见定位文本，发送测试回复后从排除输入区的消息区域回读到右侧候选；同一离线 OCR 原语在 ChatGPT 窗口用不同身份条件验证通过。场景选择器、消息统计和回复策略均未进入 CLI 核心。
 
 ## 当前限制与停止边界
-
-- 工程目标是 `net10.0-windows10.0.19041.0`；自包含 Windows x64 便携包由源码根的 `build-portable.mjs` 生成，包含 CLI、相对路径 Skill、运行文档与可选 Flow 宿主。首次构建需要网络或已缓存的 .NET runtime pack，使用核心 CLI 无需目标机另装 .NET。
+- 工程目标是 `net10.0-windows10.0.19041.0`；默认 Windows x64 便携包由源码根的 `build-portable.mjs` 生成。约 20 KB 原生入口保持 `bin/win-agent.exe` 调用路径，内部 `bin/app/win-agent.exe` 依赖系统 .NET 10 Desktop Runtime x64；相对路径 Skill、运行文档与可选 Flow 宿主随包交付。
+- 原生入口让 apphost 直接解析运行时，只有业务 Main 尚未执行的缺少 hostfxr／framework 状态才调用 Windows PowerShell 准备并最多重启一次。准备脚本串行化并发安装，复核兼容运行时，必要时从微软官方固定地址下载安装程序、核对 SHA-512 与签名并交给 Windows UAC／官方安装器，最后无副作用 probe。成功后不保存跨机器标记，后续调用不执行预检测或联网；安装后的共享运行时由微软／系统管理。下载失败、UAC 取消、安装失败均终止本次启动，应用自身错误不触发安装或重放。
 - Chrome 最小化时通常不暴露网页 UIA 子树，必须先恢复并置前台；部分自绘网页仍需键盘/坐标 fallback。
 - `profile_mode=auto` 发现已有 CDP 后复用，否则启动独立受控 profile；不会关闭普通 Chrome。`current` 仅在没有运行中 Chrome 时尝试当前用户目录启动。精确 endpoint/port 失败不启动其他实例，`TryAttach` 保留有界的分阶段失败详情。
 - `HostClient.Dispose` 收到 close 响应后等待最多 3 秒退出，避免将响应已完成误判为进程已退出；必要时仅终止 helper。Chrome 正常情况下保留供后续连接。DSH 等外部宿主的作业回收由宿主负责，使用方法见浏览器 Skill 的连接与恢复说明，不能把正常 CLI 退出验证外推为任意沙箱下的跨调用存活保证。

@@ -7,6 +7,8 @@
 从工具根目录诊断：`./bin/win-agent.exe doctor`。
 连续任务启动：`./bin/win-agent.exe exec --stdin --format ndjson`。
 
+始终调用这个原生入口，不绕过它直接运行 `bin/app/`。缺少 .NET 10 Desktop Runtime x64 时入口会下载微软安装程序并请求必要的 Windows UAC；不要把这一等待误判为页面操作卡死。首次准备可能持续数分钟，应给宿主启动任务足够的时间。stdin 不会被准备流程消费，stdout 保持 JSON 协议。UAC 拒绝、网络或安装失败会结束本次进程，报告 stderr 中原因后处理，不自动重复业务请求。正常启动不执行安装检查；应用自身错误不会触发安装或自动重放。
+
 宿主需要保持该进程及 stdin 打开，记住它实际返回的会话 ID。宿主若回收前台工具的子进程，使用其持久作业能力承载 CLI。一次 pipe 输入结束后会关闭 CLI，旧 window_id/observation_id 不能带到下一个 CLI 进程。
 
 默认连接使用 `profile_mode=auto`；指定真实 endpoint 时使用 `auto_start=false`。不要自行启动反复更换端口的 Chrome，也不要关闭全部 Chrome 来恢复连接。

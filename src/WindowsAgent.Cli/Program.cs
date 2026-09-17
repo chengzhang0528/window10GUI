@@ -22,6 +22,9 @@ internal static class Program
     [STAThread]
     private static int Main(string[] args)
     {
+        // Apphost has resolved both required frameworks before reaching Main.
+        // Used only by the portable first-run bootstrap; no desktop side effects.
+        if (args.Length == 1 && args[0] == "--runtime-probe") return 0;
         var utf8NoBom = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
         // Pipes carry the machine-readable protocol as UTF-8. A Windows
         // console or pseudoconsole, however, already exposes its active code
