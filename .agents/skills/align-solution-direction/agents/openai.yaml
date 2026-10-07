@@ -1,7 +1,7 @@
 interface:
   display_name: "Solution Direction Review"
-  short_description: "Align direction and reject unsupported policy logic"
-  default_prompt: "Use $align-solution-direction to align outcome, boundary, invariants, ownership, and completion rules while rejecting checks or policy gates without an authoritative or user-facing need."
+  short_description: "Check premises, preserve intent, and bound claims by evidence"
+  default_prompt: "Use $align-solution-direction to align outcome, boundary, invariants, ownership, and completion rules while rejecting checks or policy gates without an authoritative or user-facing need. Check user and agent premises independently, correct errors with evidence, and surface consequential omissions, costs, and reasoning bias."
 
 policy:
   allow_implicit_invocation: true
