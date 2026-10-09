@@ -4,7 +4,7 @@ Status: Active
 Kind: ProductContract
 Scope: windows-agent-cli / Windows 10 交互式桌面 GUI 自动化
 Owner: 项目维护者
-Updated: 2026-09-17
+Updated: 2026-09-20
 Depends On:
 - ../../WORKSPACE_STRUCTURE.md
 
@@ -72,7 +72,7 @@ Windows Agent CLI 固定为“可被任意 Agent 编排的 Windows 10 交互式�
 ### 场景层负责
 
 - 业务意图、页面/应用选择器、流程编排、业务断言、测试数据、重试策略和结果报告。
-- 登录态、账号选择、验证码/OTP、付款或其他业务高影响动作的授权与停止点。
+- 登录态、账号选择、验证码/OTP、付款或其他业务高影响动作的授权与停止点。上层宿主可在用户明确配置凭据、目标站点白名单和自动提交意图后处理普通账号密码登录；CLI 本身仍不持久化凭据或自行决定登录。
 - 对具体网站或应用的适配、领域 API、业务对象和数据清理；这些不进入 CLI 公共契约。
 
 ### 明确不属于底座
@@ -165,7 +165,7 @@ Vision 和通用图像理解是后续 provider 边界。当前离线 OCR 只把�
 - 显式 `endpoint` 或 `port` 表示精确连接目标，连接失败返回 `CHROME_CDP_UNAVAILABLE`，不回退其他实例。失败详情 `attempts` 最多返回 32 项，包含 endpoint、stage 和 error_code；stage 区分 version、targets、websocket_or_initialization，不把所有失败解释为端口不可达。
 - CLI 正常关闭等待 helper 退出，超时终止只针对 helper 本身，不连带终止 Chrome。外部宿主的沙箱／作业回收可能终止其子进程，调用方必须按宿主能力保持持久会话，并在跨调用后核验连接；CLI 不承诺脱离宿主进程管理。
 - `chrome.navigate` 的 `timeout_ms` 是一次导航总预算；默认 `wait_until=domcontentloaded`，`interactive` 或已出现通用可操作内容即可继续，不把 `readyState=complete` 当作必要条件。调用方可传 `ready_selector`、`ready_expression`（可选 `ready_stable_ms`）等待真正可用的控件或结果；显式 `wait_until=load|complete|network_idle` 仍表示更强的技术等待要求。技术或语义等待超时均返回有界、稳定的错误码，并带 target、阶段、URL、标题、readyState、visibility、页面正文长度、可操作元素数量、页面状态、暂停原因、请求计数、主文档 `navigation_trace` 和耗时详情。等待中识别到登录/验证时以 `CHROME_USER_ATTENTION_REQUIRED` 提前停止；页面明确报告访问或操作被临时阻止时以 `CHROME_PAGE_BLOCKED` 提前停止；两者都不消耗完整 selector timeout。脚本异常返回 `CHROME_SCRIPT_EXCEPTION`。
-- Chrome 页面状态会在导航、等待、脚本回读及等待失败诊断中报告：`usable`、`loading`、`login_required`、`risk_challenge` 或 `access_blocked`。只有真实密码控件、登录 iframe/dialog/大面积遮挡面才进入 `login_required`，页头登录链接不能单独触发暂停。登录、验证码和风控挑战是需要用户处理的可观察暂停状态；`access_blocked` 是站点明确拒绝当前访问/操作的可重试失败，不伪装为登录。CLI 不自动绕过或伪造用户通过。
+- Chrome 页面状态会在导航、等待、脚本回读及等待失败诊断中报告：`usable`、`loading`、`login_required`、`risk_challenge` 或 `access_blocked`。只有真实密码控件、登录 iframe/dialog/大面积遮挡面才进入 `login_required`，页头登录链接不能单独触发暂停。CLI 将登录、验证码和风控挑战报告为可观察暂停状态，不自动绕过或伪造用户通过；显式受信的上层宿主可仅对用户白名单站点使用本机受管凭据处理普通账号密码登录。验证码、OTP、风控挑战和未列入白名单的站点仍必须由用户处理。`access_blocked` 是站点明确拒绝当前访问/操作的可重试失败，不伪装为登录。
 - `chrome.ensure`、`chrome.attach` 以及后续页面动作先用 `Page.bringToFront` 选择准确 tab，再用 `Browser.getWindowForTarget` 返回的浏览器窗口 ID/边界结合进程、标题和前台状态核验并激活对应主 Chrome 窗口；结果返回 `window`/`window_binding`，只有 target 可见且窗口证据一致时 `verified=true`。Chrome 翻译提示、恢复气泡等独立顶层窗口不得靠进程枚举顺序冒充页面窗口。受管 Chrome 强制 renderer accessibility，并关闭后台渲染节流和崩溃恢复气泡，使 CDP 等待与 GUI fallback 在短时恢复用户原窗口后仍可继续。
 - 所有前台窗口的 `screen.capture`/`screen.capture_window` 只有在窗口 PID、类名、边界、前台关系及屏幕采样点归属均通过核验后才使用屏幕拷贝，并在 `capture_layer` 标记 `screen_copy_foreground_verified`。截图期间活动提示层会短暂隐藏，证据不包含 DeskPilot 自身边框或动作轨迹。`PrintWindow/GDI` 的空白结果不会被当作页面空白；无法建立可信归属时返回 `WINDOW_CAPTURE_UNTRUSTED`、`WINDOW_CAPTURE_EMPTY`、`WINDOW_IDENTITY_MISMATCH` 或 `WINDOW_CAPTURE_FAILED`。后台窗口绝不拿屏幕上的其他应用冒充目标。
 - `chrome.fill` 使用页面原型 setter 并派发 `input`/`change` 事件，随后严格回读值；框架页面未真正接受输入时返回 `CHROME_VALUE_NOT_VERIFIED`，不能把“键盘已发送”误判为业务成功。
@@ -174,7 +174,7 @@ Vision 和通用图像理解是后续 provider 边界。当前离线 OCR 只把�
 
 - CLI 不绕过 UAC、安全桌面、应用权限或 Windows 完整性级别。
 - 宿主可以在写操作中要求确认；缺少明确确认时返回 `NEED_USER_CONFIRMATION`。
-- UIA 标记为密码的控件不会通过 `ui.get` 回读值，`ui.set_value` 和聚焦后的 `input.type` 返回 `SENSITIVE_INPUT_BLOCKED`；登录、OTP 和验证码仍由用户手动完成。
+- UIA 标记为密码的控件不会通过 `ui.get` 回读值，`ui.set_value` 和聚焦后的 `input.type` 返回 `SENSITIVE_INPUT_BLOCKED`。DeskPilot.Console 可从当前用户环境变量读取域账号和密码，并仅在当前 Chrome 主机匹配用户配置的允许列表时，通过不记录参数的宿主受管 CDP 脚本提交普通登录表单；凭据不得进入 LLM、settings.json、会话日志或仓库。OTP、验证码、风控挑战及未允许站点仍由用户手动完成。
 - 提交、发送、删除、安装和系统设置等高影响语义由上层 Agent/宿主识别并授权，底层 GUI CLI 不凭控件名称猜测业务权限。
 - CLI 不记录或持久化密钥、输入正文、客户数据或操作日志；截图由调用方明确决定是否保留。
 - Unicode 文本输入只在操作期间临时持有调用方文本与原剪贴板对象，不写入文件或日志；正常完成后恢复原剪贴板。

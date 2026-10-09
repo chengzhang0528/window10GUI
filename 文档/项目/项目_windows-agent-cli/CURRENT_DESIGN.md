@@ -4,7 +4,7 @@ Status: Active
 Kind: CurrentDesign
 Scope: windows-agent-cli / 桌面底座与结构化流程宿主实现
 Owner: 项目维护者
-Updated: 2026-09-17
+Updated: 2026-09-20
 Depends On:
 - PRODUCT_CONTRACT.md
 - ../../../src/WindowsAgent.Cli/AGENTS.md
@@ -139,7 +139,7 @@ session
 - 每个 activity lease 在开始时捕获原前台窗口；正常结束顺序是清除可选动作轨迹 → 将稳定状态面板切换为“等待下一步”并保留尚未到期的控制边框 → 校验原 HWND 的 PID/类名 → 尽力恢复前台。边框在最后一次操作后 2 秒自行熄灭；下一操作先到则重置同一计时。若 Chrome 返回登录/风控暂停，面板切换为“等待用户处理”并立即清除边框，同时校验、保留匹配 Chrome 窗口前台，不恢复用户原窗口；取消和失败也立即清除边框，且取消不承诺撤销已发出的输入；失败只报告结构化清理错误，不绕过 Windows 前台策略。
 - 批次步骤按输入顺序执行，默认第一处错误停止；`on_error=continue` 仅允许继续独立的非变更读取，遇到变更步骤会停止。任何变更成功或失败都会使旧观察引用不可复用。
 - 自动生成的临时截图由 session 管理，在关闭或达到截图缓存上限时删除；单次命令会在响应后关闭 session，需跨命令读取时必须传入显式绝对 `path`，该文件归调用方所有并在会话结束后保留。
-- 普通单步 activity lease 对会返回观察、元素或截图引用的读取方法默认保留目标窗口激活，以便下一请求消费引用；其余动作默认在结束处恢复开始前的前台窗口。lease 结束不立即销毁或隐藏提示窗口：控制边框沿用最后操作的 2 秒滑动截止时间，稳定状态面板继续可见，直到下一请求或会话关闭。检测到 Chrome 登录/风控暂停时，无论单步、batch 还是显式 interaction，均立即清除边框、保留用户注意力窗口并把面板置为暂停状态，返回暂停诊断。要统一收口应使用 interaction/batch，单步读取可显式传 `restore_original_window=true`。
+- 普通单步 activity lease 对会返回观察、元素或截图引用的读取方法默认保留目标窗口激活，以便下一请求消费引用；其余动作默认在结束处恢复开始前的前台窗口。lease 结束不立即销毁或隐藏提示窗口：控制边框沿用最后操作的 2 秒滑动截止时间，稳定状态面板继续可见，直到下一请求或会话关闭。检测到 Chrome 登录/风控暂停时，无论单步、batch 还是显式 interaction，均立即清除边框、保留用户注意力窗口并把面板置为暂停状态，返回暂停诊断。DeskPilot.Console 仅在实际页面操作返回 `login_required` 后读取当前用户环境变量 `DESKPILOT_DOMAIN_ACCOUNT`、`DESKPILOT_DOMAIN_PASSWORD`、`DESKPILOT_AUTO_LOGIN_HOSTS`；主机必须匹配允许域名或子域，`chrome.ensure` 不触发提交。宿主通过不记录参数的受管 `chrome.evaluate` 查找同一文档内可见账号框、密码框和通用提交按钮，以原型 setter 派发 `input/change` 后提交，并在有界复核变为 `usable` 后继续；凭据不进入 `settings.json`、LLM、会话日志或仓库，同用户其他进程可读取环境变量。跨域 iframe、多页身份提供商、账号选择、OTP、验证码、风控挑战、访问阻止或提交失败仍暂停给用户，不重复提交。要统一收口应使用 interaction/batch，单步读取可显式传 `restore_original_window=true`。
 
 ## 执行层
 

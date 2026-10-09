@@ -6,6 +6,9 @@
     "test:deployment": "node --test deployment/*.test.mjs",
     "check:docs": "node --test 文档/check-docs-human.test.mjs 文档/check-docs-phases.test.mjs 文档/check-docs-references.test.mjs && node 文档/check-docs.mjs",
     "docs:check": "npm run check:docs",
-    "test:docs": "node --test 文档/check-docs-human.test.mjs"
+    "test:docs": "node --test 文档/check-docs-human.test.mjs",
+    "deskpilot": "dotnet run --project src/DeskPilot.Console",
+    "deskpilot:build": "dotnet build src/DeskPilot.Console/DeskPilot.Console.csproj",
+    "deskpilot:publish": "dotnet publish src/DeskPilot.Console/DeskPilot.Console.csproj -c Release"
   }
 }

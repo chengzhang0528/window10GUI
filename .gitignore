@@ -6,3 +6,27 @@ tmp-compile-audit.exe
 artifacts/
 **/__pycache__/
 *.py[cod]
+
+# DeskPilot local credentials and developer-only settings
+src/DeskPilot.Console/.env*
+src/DeskPilot.Console/settings*.json
+src/DeskPilot.Console/secrets*.json
+
+# OA 填单：**运行产物**不入库（每次跑都会重写，且含页面实测快照/时序）。
+# 但脚本、模板、纯数据是**资产**，必须入库 —— 实测教训：未跟踪文件损坏后无法回退
+# （2026-09-23 用 shell 文本手术把 oa-open-form.mjs 改成乱码，因未被 git 跟踪而无从恢复）。
+src/DeskPilot.Flow/.engine-*.json
+src/DeskPilot.Flow/.explore-*.json
+src/DeskPilot.Flow/.options-*.json
+src/DeskPilot.Flow/.fill-*.json
+src/DeskPilot.Flow/.fill-*.txt
+src/DeskPilot.Flow/.run-*.log
+src/DeskPilot.Flow/.run-report.json
+src/DeskPilot.Flow/.shot-*.png
+src/DeskPilot.Flow/.tmp-*/
+src/DeskPilot.Flow/.*.template.json
+
+# 仓库根下的一次性工作目录（探针、截图、会话读取器、验证器…）。
+# 为什么需要：上面的 `src/DeskPilot.Flow/.tmp-*/` 只覆盖那一个子目录，
+# 根下新建的 `.tmp-*` 会直接出现在 git status 里（2026-10-08 实测）。
+/.tmp-*/
