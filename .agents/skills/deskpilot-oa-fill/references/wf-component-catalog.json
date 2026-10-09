@@ -1,0 +1,140 @@
+{
+    "schema": "deskpilot-oa-fill/wf-component-catalog/1",
+    "system": "泛微 e-cology 定制版（联影总部 OA / 联影协同, static4form）",
+    "principle": "先识别组件，再按组件类型派发填值；组件类型是有限集合，可枚举、可复用。",
+    "universalWriteApi": "window.WfForm.changeFieldValue(fieldmark, { value: <v> })  —— 对象形式；字符串形式对多数组件静默不生效",
+    "universalReadApi": "window.WfForm.getFieldValue(fieldmark) / getFieldValueObj(fieldmark)",
+    "metadataSource": {
+        "layout": "window.WfForm.getLayoutStore() -> browserInfo / tableInfo / detailMap / cellInfo",
+        "pickerTypes": "layoutStore.browserInfo 的键即选择器类型（有限枚举；实测本租户 37 个）",
+        "domSignals": "字段单元格（td[class*=mainTd_] 的 _0 标签格的兄弟值格 / [data-fieldmark]）的 class 结构"
+    },
+    "classificationOrder": {
+        "why": "顺序即优先级。实测 2026-10-08：把 .ant-select-selection--multiple 排在 .wea-browser 之前，会把 wea-browser(multi)（如 项目号 field68007）误判成 select_multi，进而被硬写业务键并造成频闪。",
+        "order": ["detail_table", "rich_text", "date", "browser", "browser_readonly", "select_multi", "select_search", "select_single", "radio", "checkbox", "textarea", "file", "text_input", "span_display"],
+        "ambiguity": "一个单元格可能同时命中多个信号（实测 field68021 在普查里像 span_display、填充时像 text_input）——必须把全部命中记入 kinds 并置 ambiguous=true，不要静默取第一个。"
+    },
+    "components": {
+        "text_input": {
+            "signal": "input.wf-input",
+            "write": "changeFieldValue(fid,{value:'<text>'})",
+            "verify": "getFieldValue===want"
+        },
+        "textarea": {
+            "signal": "textarea（或 span.wf-form-textarea + hidden）",
+            "write": "changeFieldValue(fid,{value:'<text>'})",
+            "verify": "getFieldValue===want"
+        },
+        "span_display": {
+            "signal": "span[id$=span] + input[type=hidden]，无可见输入",
+            "write": "changeFieldValue(fid,{value:'<text>'})",
+            "verify": "getFieldValue===want"
+        },
+        "select_single": {
+            "signal": ".ant-select（非 multiple）",
+            "write": "{pickText:'<选项标签>'} —— 开下拉点真实 li（推荐）；或 changeFieldValue(fid,{value:'<已实测的 optionValue>'})",
+            "verify": "getFieldValue 非空，且界面显示为所选标签",
+            "note": "实测该租户的 option li 没有 data-value，optionValue 只能靠点选后回读得到（采购类型「普通」=>0，签批跳转「采购下单」=>3，是否含培训费「否」=>0）。不要凭印象编 optionValue，也不要照抄别的表单的值。"
+        },
+        "select_multi": {
+            "signal": ".ant-select-selection--multiple",
+            "write": "{pickText:'<选项标签>'} 逐个点选；或 changeFieldValue(fid,{value:'v1,v2'})（仅当该值已实测）",
+            "verify": "getFieldValue 非空"
+        },
+        "select_search": {
+            "signal": ".ant-select-search__field",
+            "write": "点搜索框输入触发加载 -> 选 li",
+            "verify": "getFieldValue 非空"
+        },
+        "browser": {
+            "signal": ".wea-browser（且非 .wea-field-readonly）；内部是 .wea-associative-search",
+            "write": "禁止 changeFieldValue 硬写。走弹框选行：可信 chrome.click 点 [data-fieldmark='<fid>'] button.ant-btn-icon-only -> 等弹框且行数>0 -> chrome.click 真实行（跳过首列为 0 的占位行）",
+            "verify": "getFieldValue 非空，且该行 3 秒内 MutationObserver 变更次数为 0",
+            "measuredFailure": "2026-10-08 UIH-01 项目号 field68007：changeFieldValue 写入后 getFieldValue 立刻相等（假通过），但该 tr 3 秒内被重建 133-153 次（约 50 次/秒），模型在 '' 与键值之间反复跳 —— 界面表现为持续频闪。同一实例改用弹框选行后 0 次/3s 且显示正确。"
+        },
+        "browser_readonly": {
+            "signal": ".wea-browser.wea-field-readonly",
+            "write": "系统字段，一般跳过；确需赋值同 browser（同样禁止硬写）",
+            "verify": "getFieldValue"
+        },
+        "radio": {
+            "signal": "input[type=radio]",
+            "write": "changeFieldValue(fid,{value:'<radioValue>'})（对象形式）或点选",
+            "verify": "getFieldValue 非空，且该组变为可见/选中"
+        },
+        "checkbox": {
+            "signal": "input[type=checkbox]",
+            "write": "changeFieldValue(fid,{value:'1' 或 '0'})（对象形式）",
+            "verify": "getFieldValue"
+        },
+        "date": {
+            "signal": ".ant-calendar-picker",
+            "write": "changeFieldValue(fid,{value:'YYYY-MM-DD'})",
+            "verify": "getFieldValue"
+        },
+        "rich_text": {
+            "signal": ".cke_editor / [id^=cke_]",
+            "write": "CKEDITOR.instances['<name>'].setData('<p>..</p>')",
+            "verify": "CKEDITOR.instances[name].getData()（getFieldValue 对它永远为空，不能用它判定）"
+        },
+        "file": {
+            "signal": "input[type=file]",
+            "write": "CDP DOM.setFileInputFiles",
+            "verify": "files.length>0"
+        },
+        "detail_table": {
+            "signal": "table.excelDetailTable；symbol 从 getLayoutStore().tableInfo 取（实测本表 = detail_1）",
+            "write": "WfForm.addDetailRow('<symbol>','1') 后**等约 1s**（行异步渲染），再按**子字段的 data-fieldname** 填（子字段 fieldmark 形如 fieldNNNNN_<rowIndex>）。加行按钮是 #addbutton0 / i.icon-coms-Add-to-hot.detailBtn。**加行必须幂等**：实测干净实例的明细起始行数是 **0**（不是 1；看到 1 行是因为联动已经建了一行），所以固定'加一行'在 0 行与 1 行两种起点上分别得到 1 行和 2 行 —— 不可复现。用 `until: N`（补到 N 行）代替。",
+            "verify": "getDetailRowCount(symbol) 增加；每列回读（数值列见下）",
+            "measuredColumns": {
+                "note": "实测 detail_1 共 **83** 个列位，绝大多数隐藏。真正渲染且可填的（fieldmark_0 / data-fieldname / 组件）：",
+                "rows": [
+                    "field67977_0 sfswlh 是否实物料号 select_single",
+                    "field67976_0 wllx 物料类型 browser",
+                    "field67979_0 mpn MPN型号 text_input",
+                    "field67939_0 wsdj 预估单价(未税) text_input",
+                    "field67966_0 shf 工厂 browser",
+                    "field67934_0 tzbb 图纸版本 text_input",
+                    "field67932_0 wlh 物料号 browser（**驱动列**）",
+                    "field67974_0 wldl 物料大类 browser",
+                    "field67980_0 mfr text_input",
+                    "field67933_0 wlbb 物料版本 text_input",
+                    "field94716_0 sfhkgl 是否含客供料 select_single",
+                    "field67971_0 cgfl 采购分类 select_single",
+                    "field67941_0 yqjq 要求交期 date",
+                    "field67938_0 sl 数量 text_input",
+                    "field67935_0 gysjpp 供应商及品牌 text_input",
+                    "field67969_0 cgwllb 物料小类 browser",
+                    "field67978_0 mpnbm MPN料号 browser"
+                ]
+            },
+            "derivedColumnsNeverHandWrite": "field67940 wszj 预估总价(未税)（= 数量 x 单价，实测 2x5400=10800.00、5x3200=16000.00，页面还会算合计未税金额 26800.00）；field67936 pmms 品名描述 / field67937 dw 单位 / field67975 wlzl 物料中类（均由 **物料号 wlh 的弹框选行**带出）。手写它们会被联动覆盖或清空。",
+            "numericNormalization": "OA 会规范化数值：写 '2' 回读 '2.000'、写 '5400' 回读 '5400.0000' —— 判等必须按数值比较，否则会把**成功**的写入报成失败（实测 14 条明细写入里有 4 条被字符串判等误判）。",
+            "selectOptionsMeasured": "实测两个明细下拉都是 [空, 是, 否]，optionValue 为 是=0 / 否=1（field67977 sfswlh 是否实物料号、field94716 sfhkgl 是否含客供料）；仍应走 {pickText} 点真实选项，不要照抄这两个数字到别的表单。",
+            "relatedDialogsMeasured": "field96457 glcgdd 关联STO单号 -> 弹框「SAP采购订单」10 行，选行后回读 5500009918；field67976 wllx 物料类型 在上游联动后变 browser_readonly（无放大镜）-> 不可填；field67996 cx / field67945 hjkm / field67947 cgy / field67978 mpnbm 同为只读。",
+            "notFillableEvidence": "判「不可填」的硬证据：该单元格带 .wea-field-readonly **且** 内部 button 数为 0。实测每行 8 个空列全部满足（5 个只读 + 3 个无按钮的显示位）；其中 客供料描述 wlmswlh / 客供料数量 kglsl 在「是否含客供料=否」时本就不适用，PO单号 podh 由系统在生成 PO 后回填。"
+        }
+    },
+    "conditionalFields": {
+        "signal": "值单元格（或内部的触发按钮）getBoundingClientRect() 为 0x0，且其 tr 带 linkage_hide / display:none —— 字段在表单模型里存在但被**联动隐藏**",
+        "tryFirst": "WfForm.changeFieldAttr(fid, { view: 0 }) —— 实测 2026-10-08 能**清掉 linkage_hide 并真正渲染**：工厂 field68033 从 tr.linkage_hide / display:none / 放大镜 0x0 变为 display:table-row 且放大镜 16x28 可点，随后弹框选行成功得 1201。**注意这会覆盖 OA 自己的联动决定**（该字段可能是按当前上游值有意隐藏的），所以必须如实说明是「强制显示后填的」。另注意 getFieldCurViewAttr 在该字段上恒返回 3，不能拿它判断有没有真的显示出来 —— 要看 tr 的 class/display 与按钮尺寸。",
+        "action": "强制显示失败时才记 conditional_hidden（有据可依未填，不算失败）；有显式值时仍可写入，并记 wasHidden=true",
+        "measured": "2026-10-08 UIH-01 工厂 field68033：tr class = ' linkage_hide'、display:none、放大镜 rect=0x0 @(0,0)，document.elementFromPoint 落在 DIV.ant-col-24 wea-new-top-req-main。注意普查器可能把它报成 rendered:true，因为量的是值单元格。"
+    },
+    "verificationDiscipline": {
+        "rule": "写完立刻 getFieldValue===want 不足以判定成功（存在假通过）。",
+        "how": "对 browser 与联动字段，另加一次延迟复读 + 变更计数：在【该字段所在 tr】（不是单元格！）上挂 MutationObserver 观察 2-3 秒；同时放一个【有值的对照字段】（普通 ant-select / textarea）同测。若目标行高频变更而对照行为 0，即为该组件自激循环。",
+        "pitfall": "挂在单元格或 [data-fieldmark] 上的观察器会数到 0 —— OA 会整体替换单元格节点；必须观察 tr。"
+    },
+    "notes": [
+        "选择器(browser)字段不要用 changeFieldValue 硬写 —— 会造成约 50 次/秒重建的频闪（详见 components.browser.measuredFailure）。旧版本此处写的「必须走 changeFieldValue」是错的，2026-10-08 实测推翻。",
+        "字符串形式 changeFieldValue(fid,'x') 对多数组件无效，统一用对象形式 {value:...}。",
+        "界面显示名解析（4503->张成）不会因写值而触发；数据层正确即可，显示层可能为空。这与频闪是两件事：显示为空是稳定的，频闪不是。",
+        "禁止为「重置表单」而直接导航 static4form URL：会使会话失效并跳登录页（login_required），DeskPilot 会拒绝（CHROME_USER_ATTENTION_REQUIRED）。要保持会话就留在原标签页；要重开表单从「新建流程」入口进。",
+        "OA 空闲超时会把 static4form 直接弹回登录页；重登后原表单实例作废，必须经「新建流程」重开一张（实测 _rdm 变化即新实例）。",
+        "判断弹框/下拉是否可见：不要用 offsetParent（antd 固定定位元素打开时也恒为 null），用 getBoundingClientRect 尺寸 + computed display。",
+        "等待弹框数据：容器远早于数据行出现（实测正文 713 vs 1563 字符）——等待条件必须包含「弹框内 .ant-table-body tbody tr 行数 > 0」。",
+        "富文本验证用 CKEDITOR getData()；**date 字段可以直接写** —— 实测 changeFieldValue(fid,{value:'2026-10-31'}) 立即回读一致（明细 field67941 要求交期，两行都成功），所以不需要日历交互；只有 API 写入被拒时才需要走 .ant-calendar-picker 交互（本能力尚未实现该交互，那就如实记 skipped，不要假装已写）。",
+        "字段类型会随联动变化：实测 wllx 物料类型 在空值时为 browser（有放大镜），上游选值后变 browser_readonly（放大镜消失）。因此**每轮都要重新普查**，不要缓存上一轮的组件判定。"
+    ]
+}

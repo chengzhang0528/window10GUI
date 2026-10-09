@@ -1,0 +1,28 @@
+{
+  "form_key": "uih01-wh-purchase-requisition",
+  "scenario": "UIH-01-WH-A-普通",
+  "submitted_by": "张成",
+  "note": "UIH-01 采购申请单(武汉联影/湖北智造)-SAP：只含业务值，无 selector/widget。字段名与 templates/uih01wh-purchase-requisition.template.json 的 field_map key 一致。只读字段（PR流水号/申请人/申请日期/经费属性/项目经理/业务分类/采购大类/合计未税金额/SAP项目号）无需提供。",
+
+  "values": {
+    "标题": "UIH-01 采购申请单(武汉联影/湖北智造)-SAP-DeskPilot验证",
+    "采购需求说明": "用于产线工装夹具校验的数字万用表，需支持 6.5 位分辨率与 LAN 接口。本单仅用于 DeskPilot 自动化链路验证，不实际采购。",
+    "申请原因": "DeskPilot 端到端链路验证，不用于真实采购。",
+
+    "采购类型": "普通",
+    "项目节点": "G1之前",
+    "组合管理分类": "产品开发",
+
+    "业务实体": "武汉联影医疗科技有限公司",
+    "币种": "CNY",
+    "项目号": "100310000001",
+    "经费": "0"
+  },
+
+  "radio_selected": [
+    "不指定供应商",
+    "无IT类采购",
+    "非化学品",
+    "用于型式检测样机或临床样机"
+  ]
+}

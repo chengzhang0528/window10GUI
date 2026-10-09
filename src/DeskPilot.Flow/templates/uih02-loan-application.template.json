@@ -1,0 +1,78 @@
+{
+  "form_key": "uih02-loan-application",
+  "biz_name": "UIH-02 借款申请单(上海/武汉联影)-SAP",
+  "recorded_at": "2026-09-23",
+  "recorded_from": "阶段1 普查（oa-explore-form.mjs）+ 阶段2 穷尽（oa-explore-options.mjs）实测导出；workflowid=2254。字段↔selector 由页面 [data-fieldname] 与内部 input.id 直接导出，非推测。",
+  "entry": {
+    "url": "https://oa.united-imaging.com/wui/index.html#/main/workflow/add",
+    "card": { "selector": "a", "text_contains": "UIH-02 借款申请单(上海/武汉联影)-SAP" },
+    "attach": { "url_contains": "static4form" }
+  },
+  "field_map": {
+    "手机号":          { "type": "text", "selector": "#field70474", "fieldname": "sjh", "required": true },
+    "借款金额":        { "type": "text", "selector": "#field70479", "fieldname": "amount", "required": true },
+    "事由描述":        { "type": "text", "selector": "#field70519", "fieldname": "fysm", "required": true },
+    "付款金额":        { "type": "text", "selector": "#field70496", "fieldname": "ap_payment_amount", "required": true },
+    "预计核销日期":    { "type": "datepicker", "selector": "[data-fieldname=ATTRIBUTE2]", "fieldname": "ATTRIBUTE2", "required": true,
+                         "note": "阶段3实测：这是 wea-date-picker，内部只有 hidden input(#field70478)，**没有可写的 text 输入**。日期选择器需要点开日历选日期，不是 fill 能解决的 —— 已识别为新字段类型 datepicker，引擎遇到会如实记 skipped(unsupported_kind) 而不是假装写入" },
+    "凭证年份":        { "type": "text", "selector": "#field70525", "fieldname": "pznf", "required": true, "finance_section": true,
+                         "note": "阶段3实测：与「记账人」同一行、紧邻财务凭证表格（借贷方向/OA单据号/凭证类型/过账日期…），属**财务凭证区块**，本就不该由申请人填写。标 finance_section，数据未给时引擎记 skipped(finance_section)，不计为缺口" },
+    "凭证号":          { "type": "text", "selector": "#field70526", "fieldname": "pzh", "required": true, "finance_section": true,
+                         "note": "同上，财务凭证区块字段" },
+
+    "支付方式":        { "type": "select", "widget": "#weaSelect_1", "selector": "#weaSelect_1", "fieldname": "zffs", "required": true,
+                         "note": "阶段3实测：容器是 div#weaSelect_1.wea-select > .ant-select。**不要**写 [data-fieldname=zffs] .ant-select —— 实测那样选不到（下拉展不开）" },
+    "借款事由":        { "type": "select", "widget": "#weaSelect_2", "selector": "#weaSelect_2", "fieldname": "shiyou", "required": true,
+                         "note": "阶段3实测：容器 div#weaSelect_2" },
+
+    "借款人":          { "type": "browser", "widget": "[data-fieldname=ATTRIBUTE4] button.ant-btn-icon-only", "selector": "[data-fieldname=ATTRIBUTE4]", "fieldname": "ATTRIBUTE4",
+                         "expect_dialog": "人力资源", "dialog_kind": "person-list", "optional": true,
+                         "search": true, "search_input_placeholder": "请输入关键字搜索", "search_value": "张成", "pick": "张成",
+                         "confirm_button": "确 定", "list_selector": ".wea-crm-list",
+                         "note": "人员选择型弹窗（与 UIH-01 加签人同构）。实测该弹窗 5 个标签页可能均为空（数据可得性），故标 optional" },
+    "借款人部门":      { "type": "browser", "widget": "[data-fieldname=ATTRIBUTE5] button.ant-btn-icon-only", "selector": "[data-fieldname=ATTRIBUTE5]", "fieldname": "ATTRIBUTE5",
+                         "expect_dialog": "部门", "dialog_kind": "person-list", "optional": true,
+                         "search": true, "search_input_placeholder": "请输入关键字搜索", "search_value": "测试部", "pick": "测试部",
+                         "confirm_button": "确 定", "list_selector": ".wea-crm-list" },
+    "借款人BU":        { "type": "browser", "widget": "[data-fieldname=jkrfb] button.ant-btn-icon-only", "selector": "[data-fieldname=jkrfb]", "fieldname": "jkrfb",
+                         "expect_dialog": "分部", "dialog_kind": "person-list", "optional": true,
+                         "search": true, "search_input_placeholder": "请输入关键字搜索", "search_value": "部件", "pick": "部件",
+                         "confirm_button": "确 定", "list_selector": ".wea-crm-list" },
+    "成本中心负责人":  { "type": "browser", "widget": "[data-fieldname=costmanager] button.ant-btn-icon-only", "selector": "[data-fieldname=costmanager]", "fieldname": "costmanager",
+                         "expect_dialog": "人力资源", "dialog_kind": "person-list", "optional": true,
+                         "search": true, "search_input_placeholder": "请输入关键字搜索", "search_value": "张成", "pick": "张成",
+                         "confirm_button": "确 定", "list_selector": ".wea-crm-list" },
+    "记账人":          { "type": "browser", "widget": "[data-fieldname=jzr] button.ant-btn-icon-only", "selector": "[data-fieldname=jzr]", "fieldname": "jzr",
+                         "expect_dialog": "人力资源", "dialog_kind": "person-list", "optional": true,
+                         "search": true, "search_input_placeholder": "请输入关键字搜索", "search_value": "张成", "pick": "张成",
+                         "confirm_button": "确 定", "list_selector": ".wea-crm-list" },
+
+    "费用公司":        { "type": "browser", "widget": "[data-fieldname=Org_ID] button.ant-btn-icon-only", "selector": "[data-fieldname=Org_ID]", "fieldname": "Org_ID",
+                         "expect_dialog": "SAP_内部往来", "search": true, "search_index": 0, "optional": true,
+                         "search_value": "上海联影", "pick": "上海联影医疗科技股份有限公司",
+                         "note": "阶段2实测：弹窗 SAP_内部往来，5 行，列=公司名称/公司编码。两个搜索框**都无 id 可匹配**，只能按序号盲选（引擎会记为 by_index_blind 提示人工核对），故标 optional" },
+    "核销对方科目":    { "type": "browser", "widget": "[data-fieldname=ATTRIBUTE3] button.ant-btn-icon-only", "selector": "[data-fieldname=ATTRIBUTE3]", "fieldname": "ATTRIBUTE3",
+                         "expect_dialog": "SAP_会计科目", "search": false, "pick": "",
+                         "optional": true,
+                         "note": "阶段2实测：弹窗 SAP_会计科目 1 行，列=总账科目号/科目货币/总账科目类型/总账科目组；非必填故不指定 pick" },
+    "付款条件":        { "type": "browser", "widget": "[data-fieldname=Payment_term] button.ant-btn-icon-only", "selector": "[data-fieldname=Payment_term]", "fieldname": "Payment_term",
+                         "expect_dialog": "SAP_付款条件", "search": false, "pick": "",
+                         "optional": true,
+                         "note": "阶段2实测：弹窗 SAP_付款条件 10 行" },
+    "币种":            { "type": "browser", "widget": "[data-fieldname=invoice_currency_code] button.ant-btn-icon-only", "selector": "[data-fieldname=invoice_currency_code]", "fieldname": "invoice_currency_code",
+                         "expect_dialog": "SAP_币种", "search": true, "search_box_id": "con57483_value", "search_value": "CNY", "pick": "CNY",
+                         "note": "复用 UIH-01 的实测结论：币种弹窗搜索框标签顺序与表头相反，CNY 是编码 → 必须填 con57483_value" }
+  },
+  "value_catalog": {
+    "_note": "阶段2实测候选值。校验器用它判断用户给的值是否在已知范围内；不在范围内列为「待用户确认」，不硬填。",
+    "支付方式": ["现金", "银行"],
+    "借款事由": ["备用金", "零星采购", "大型会议", "接待客户", "国际差旅", "长期国内差旅", "其他外部公司事务", "其他"],
+    "费用公司": ["上海联影医疗科技股份有限公司"]
+  },
+  "readonly_fields": ["sqrq", "syb", "ATTRIBUTE6", "ATTRIBUTE7", "ATTRIBUTE8", "EMPLOYEE_NUMBER", "invoice_num", "ATTRIBUTE2", "djsm"],
+  "notes": {
+    "form_id": "workflowid=2254",
+    "phase2_summary": "已渲染 27 字段；可交互 11 个（select 2 / browser 9）。9 个弹窗已逐个实测标题与行数。",
+    "hidden_fields": "SEGMENT1/2/4-9、sqr、zhzh、zhmc 等 23 个字段当前状态未渲染（w=0），依设计不填。"
+  }
+}

@@ -1,0 +1,80 @@
+{
+  "form_key": "uih02-travel-reimbursement",
+  "biz_name": "UIH-02 国内差旅报销-SAP",
+  "recorded_at": "2026-09-23",
+  "recorded_from": "阶段1 普查（oa-explore-form.mjs，94 字段/40 已渲染）+ 阶段2 穷尽（oa-explore-options.mjs，3 select + 22 browser）实测导出；workflowid=2211。字段→selector 由页面 [data-fieldname] 与内部 input.id 直接导出，非推测。",
+  "entry": {
+    "url": "https://oa.united-imaging.com/wui/index.html#/main/workflow/add",
+    "card": { "selector": "a", "text_contains": "UIH-02 国内差旅报销-SAP" },
+    "attach": { "url_contains": "static4form" }
+  },
+  "field_map": {
+    "联系电话":     { "type": "text", "selector": "#field67168", "fieldname": "lxdh" },
+    "事由描述":     { "type": "text", "selector": "#field67173", "fieldname": "fysm" },
+
+    "附件":         { "type": "upload", "selector": "[data-fieldname=fj]", "fieldname": "fj", "optional": true,
+                     "note": "阶段4实测（2026-09-23）：容器 `div.wea-upload`，内含**真实的 `<input type=\"file\" multiple>`**（id 形如 html5_xxx，**每次渲染会变，不可写死**，引擎按容器内查找）。上传路径：页面内构造 File 赋给 input.files 并派发 change —— 实测 OA 的 `.wea-upload-list` 立刻显示 `文件名 大小`，且带 编辑/删除/下载 图标，说明上传登记真的发生了。**诚实边界：文件内容为页面内构造，非从磁盘读取**（CLI 未暴露 DOM.setFileInputFiles），仅能验证上传链路。" },
+
+    "关联流程":     { "type": "browser", "widget": "[data-fieldname=xglc] button.ant-btn-icon-only", "selector": "[data-fieldname=xglc]", "fieldname": "xglc", "optional": true,
+                     "expect_dialog": "流程", "search": false,
+                     "note": "页面上标必填，但阶段2实测弹窗 rows=0（无候选可供脚本选择）。**刻意不标 required=true**：标了会让预检强制索要一个我们无法取得的值，逼人编造。真实业务中该项由申请人从其流程实例里选，属人工输入；脚本如实上报 skipped，不阻断。" },
+
+    "目的城市":     { "type": "browser", "widget": "[data-fieldname=target_city] button.ant-btn-icon-only", "selector": "[data-fieldname=target_city]", "fieldname": "target_city", "required": true,
+                     "expect_dialog": "国内地区", "search": false, "pick": "北上广深",
+                     "note": "阶段2实测：弹窗「国内地区」2 行，列=名称/编号/所属国家/状态：中国其他城市(0002)、北上广深(0001)。" },
+
+    "费用类型":     { "type": "browser", "widget": "[data-fieldname=fylx1] button.ant-btn-icon-only", "selector": "[data-fieldname=fylx1]", "fieldname": "fylx1", "optional": true,
+                     "expect_dialog": "报销费用类型", "search": false,
+                     "note": "页面标必填，但阶段2实测弹窗 rows=0（无候选）。同「关联流程」：不标 required，如实上报，不编造。" },
+
+    "电子发票":     { "type": "browser", "widget": "[data-fieldname=einvoice] button.ant-btn-icon-only", "selector": "[data-fieldname=einvoice]", "fieldname": "einvoice", "optional": true,
+                     "expect_dialog": "电子发票详细信息", "search": false,
+                     "note": "页面标必填，但阶段2实测弹窗 rows=0。发票类字段依赖上游发票数据（需先由财务系统/发票池提供），脚本无从取得；不编造，如实上报。" },
+
+    "成本中心":     { "type": "browser", "widget": "[data-fieldname=SEGMENT3] button.ant-btn-icon-only", "selector": "[data-fieldname=SEGMENT3]", "fieldname": "SEGMENT3", "optional": true,
+                     "expect_dialog": "SAP_成本中心", "search": false,
+                     "note": "阶段2实测：10 行，列=成本中心/成本中心描述/公司代码/负责人/长文本/成本中心类型。**search 设为 false**：该字段未提供 search_value，若标 search:true 会报 no_search_value（且该错误会置引擎 exit=2）。需要搜索时再补 search_box_id + search_value。" },
+    "项目号":       { "type": "browser", "widget": "[data-fieldname=SEGMENT6] button.ant-btn-icon-only", "selector": "[data-fieldname=SEGMENT6]", "fieldname": "SEGMENT6", "optional": true,
+                     "expect_dialog": "SAP_项目号", "search": false,
+                     "note": "阶段2实测：10 行，列=内部订单/订单类型/订单描述/公司代码/业务范围/负责人；公司代码 1001（上海）。搜索框为 con57290_value；未给 search_value 故 search:false。" },
+    "经费号":       { "type": "browser", "widget": "[data-fieldname=SEGMENT8] button.ant-btn-icon-only", "selector": "[data-fieldname=SEGMENT8]", "fieldname": "SEGMENT8",
+                     "expect_dialog": "经费号（上海、武汉）", "search": false, "optional": true,
+                     "note": "阶段2实测：10 行，列=经费号/经费来源/公司。首行是 0，另有 701001/01-上海科委 等真实经费号。**注意与采购单的「经费号_SAP采购」是不同弹窗**。" },
+    "经费属性":     { "type": "browser", "widget": "[data-fieldname=SEGMENT5] button.ant-btn-icon-only", "selector": "[data-fieldname=SEGMENT5]", "fieldname": "SEGMENT5",
+                     "expect_dialog": "SAP_经费属性", "search": false, "optional": true,
+                     "note": "阶段2实测：3 行，列=名称/编号：自筹(103004)、专项(103003)、0(0)。" },
+
+    "发票类型":     { "type": "select", "widget": "#weaSelect_1", "selector": "#weaSelect_1", "fieldname": "fplx", "optional": true,
+                     "note": "阶段2实测：3 个 select 中只有 1 个拿到选项（本字段）。**标 optional**：数据未提供时引擎记 skipped 而非 no_value（后者会置引擎 exit=2，让整轮看起来失败）。选项数量以阶段2产物为准；为空说明该状态下未渲染出下拉项。" },
+
+    "开始日期":     { "type": "datepicker", "selector": "[data-fieldname=start_date]", "fieldname": "start_date",
+                     "note": "阶段4实测（2026-09-23）：控件是 `div.wea-date-picker.required.noInput > span.ant-calendar-picker`，其内部 **input 是 type=hidden**（#field67027_0），**没有可写的文本输入**。这正是既有 `datepicker` 类型描述的情形（与 UIH-02 借款申请单的 预计核销日期 同族），故标 datepicker：引擎记 skipped(unsupported_kind) 并**如实上报**，不伪装写入。" },
+    "结束日期":     { "type": "datepicker", "selector": "[data-fieldname=end_date]", "fieldname": "end_date",
+                     "note": "同 开始日期：`div.wea-date-picker.required.noInput`，内部 input type=hidden（#field67029_0）。" },
+    "开始时间":     { "type": "datepicker", "selector": "[data-fieldname=start_time]", "fieldname": "start_time",
+                     "note": "阶段4实测：`span.wea-date-picker.noInput > span.ant-time-picker`，内部 input type=hidden（#field67028_0），**页面已自带值 21:38**（时间类控件常默认当前时间）。非必填。" },
+    "结束时间":     { "type": "datepicker", "selector": "[data-fieldname=end_time]", "fieldname": "end_time",
+                     "note": "同 开始时间：内部 input type=hidden（#field67030_0），已自带值。" }
+  },
+  "detail_columns": {
+    "add": "#addbutton0",
+    "note": "阶段1实测：description/sbybje 的 input 形如 #field67017_0 / #field67004_0，即**明细行结构**（与采购单同族）。行号规则见 universal-pitfalls #19：`_0` 在空表里是占位行，真实数据行从 `_1` 起；引擎会先判是否存在可写行再决定是否点「新增行」。",
+    "columns": {
+      "费用说明":   { "selector": "#field67017_N", "fieldname": "description" },
+      "申报金额":   { "selector": "#field67004_N", "fieldname": "sbybje" }
+    }
+  },
+  "value_catalog": {
+    "_note": "阶段2实测候选值（本表单）。",
+    "目的城市": ["中国其他城市", "北上广深"],
+    "经费属性": ["自筹", "专项", "0"]
+  },
+  "readonly_fields": ["sqr", "sqrq", "cbzx", "sqbm", "Org_ID", "dzfp", "splitedinv"],
+  "radios": [],
+  "notes": {
+    "form_id": "workflowid=2211",
+    "phase2_summary": "普查 94 字段（40 已渲染）；可交互 = select 3 + browser 22。其中 9 个 browser 实测到弹窗与行数，其余 13 个在该状态下弹窗未出现（多为依赖上游数据的发票/流程类）。",
+    "structural_difference": "**这是与采购申请单完全不同的表单族**：① 字段命名用 `SEGMENT1..8` 而非 `fieldNNNNN`；② 含**日期字段**（start_date/end_date，必填）与**时间字段**；③ 含**发票类**字段（einvoice/电子发票详细信息、dzfp、splitedinv）；④ 有明细行但只有 2 列（费用说明/申报金额）。",
+    "unconfirmed": "① 日期字段（start_date/end_date，REQ）尚**未实现**交互方式 —— 若与本仓库既有的 `datepicker` 同族，应标 datepicker；若不是，需单列一类。**在确认前不得假装写入**。② 多数 browser 字段弹窗 rows=0，其取值需真实业务数据，本轮一律标 optional 并如实上报。"
+  }
+}

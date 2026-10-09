@@ -1,0 +1,112 @@
+{
+  "form_key": "uih01-purchase-requisition",
+  "biz_name": "UIH-01 采购申请单(上海联影)-SAP",
+  "recorded_at": "2026-09-23",
+  "recorded_from": "受控 Chrome 实测（workflowid=2562）。字段↔id 映射由页面 [data-fieldname] 与内部 input.id 直接导出，非推测。",
+  "entry": {
+    "url": "https://oa.united-imaging.com/wui/index.html#/main/workflow/add",
+    "card": { "selector": "a", "text_contains": "UIH-01 采购申请单(上海联影)-SAP" },
+    "attach": { "url_contains": "static4form" }
+  },
+  "field_map": {
+    "标题":            { "type": "text", "selector": "#requestname", "required": true, "fieldname": "requestname" },
+    "联系电话":        { "type": "text", "selector": "#field68003", "required": true, "fieldname": "lxdh" },
+    "PR流水号":        { "type": "text", "selector": "#field68002", "fieldname": "prlsh", "readonly": true, "note": "系统流水号，只读" },
+    "申请日期":        { "type": "text", "selector": "#field68005", "fieldname": "sqrq", "readonly": true },
+    "执行组织":        { "type": "text", "selector": "#field68039", "fieldname": "zxzz", "readonly": true },
+    "币种":            { "type": "text", "selector": "#field68004", "fieldname": "bz", "readonly": true },
+    "海外BUZ":         { "type": "text", "selector": "#field68050", "fieldname": "shfbuz", "readonly": true },
+    "是否无采购报告":  { "type": "text", "selector": "#field68056", "fieldname": "sfwcrbg", "readonly": true },
+    "合计未税金额":    { "type": "text", "selector": "#field68013", "fieldname": "hjwsje", "readonly": true, "note": "页面自动汇总" },
+
+    "CR/ECO NO.":      { "type": "text", "selector": "#field68031", "required": true, "fieldname": "crecono", "note": "实测 data-fieldname=crecono（曾误当作「加签人」）" },
+    "指定供应商名称":  { "type": "text", "selector": "#field68021", "required": true, "fieldname": "zdgysmc" },
+    "指定供应商原因":  { "type": "text", "selector": "#field68022", "required": true, "fieldname": "zdgysyy" },
+    "采购需求说明":    { "type": "text", "selector": "#field68028", "required": true, "fieldname": "cgxqsm" },
+    "申请原因":        { "type": "text", "selector": "#field68006", "required": true, "fieldname": "sqyy" },
+
+    "采购类型":        { "type": "select", "selector": "#weaSelect_1", "widget": "#weaSelect_1", "fieldname": "cglx", "default": "普通", "note": "实测 data-fieldname=cglx 的容器内含 div#weaSelect_1.wea-select > .ant-select；**不要**用 #field68058（那是 swapDiv，里面没有 .ant-select）" },
+    "项目节点":        { "type": "select", "selector": "#weaSelect_3", "widget": "#weaSelect_3", "fieldname": "xmjd", "default": "G1之前", "note": "实测容器 div#weaSelect_3" },
+    "组合管理分类":    { "type": "select", "selector": "#weaSelect_4", "widget": "#weaSelect_4", "fieldname": "zhglfl", "default": "产品开发", "note": "实测容器 div#weaSelect_4" },
+
+    "项目号":          { "type": "browser", "widget": "[data-fieldname=xmh] button.ant-btn-icon-only", "selector": "#field68007", "fieldname": "xmh", "required": true,
+                        "expect_dialog": "SAP_项目号", "search": true, "search_box_id": "con57290_value", "search_value": "100167003201", "pick": "100167003201",
+                        "note": "阶段2实测：弹窗标题 SAP_项目号，10 行，列=内部订单/订单类型/订单描述/公司代码/业务范围/负责人，搜索框 con57290_value 等 3 个，无确认按钮" },
+    "工厂":            { "type": "conditional-detail", "widget": "[data-fieldname=lcck] button.ant-btn-icon-only", "selector": "#field68033", "fieldname": "lcck",
+                        "expect_dialog": "SAP工厂", "search": false, "pick": "上海联影生产工厂-CO", "row_class": "linkage_hide",
+                        "note": "阶段2实测：工厂(lcck)与子库(zk)同处一行的**明细列**，该 <tr> 带 `linkage_hide` 且 display:none —— 是被上游值条件隐藏，不是滚动问题（早前误判为 out_of_view）。默认场景下不显示，故标记为 conditional-detail：引擎只在它可见时才填，不可见则记 skipped(conditional_hidden)，不算失败" },
+    "币种":            { "type": "browser", "widget": "[data-fieldname=bz] button.ant-btn-icon-only", "selector": "#field68004", "fieldname": "bz",
+                        "expect_dialog": "SAP_币种", "search": true, "search_box_id": "con57483_value", "search_value": "CNY", "pick": "CNY",
+                        "note": "阶段2实测：弹窗 SAP_币种。**搜索框标签顺序与表头顺序相反** —— 表头是「币种编码|币种名称」，而搜索框是「币种名称」(左,id=con57482_value) | 「币种编码」(右,id=con57483_value)。CNY 是编码，必须填 con57483_value；填左侧框必得 0 行。搜编码命中 1 行：CNY|中国人民币（国际）" },
+    "经费":            { "type": "browser", "widget": "[data-fieldname=jf] button.ant-btn-icon-only", "selector": "#field68027", "fieldname": "jf", "required": true,
+                        "expect_dialog": "经费号_SAP采购", "search": false, "pick": "0",
+                        "note": "阶段2实测：弹窗 经费号_SAP采购 只有 1 行且值=0，用项目号搜不出结果。故 search:false 直接选唯一的 0" },
+    "经费属性":        { "type": "text", "selector": "#field68008", "fieldname": "ck", "readonly": true, "note": "实测 ck 外层带 wea-field-readonly，是只读展示字段（此前误当作 browser/text 可填）" },
+    "加签人":          { "type": "browser", "widget": "[data-fieldname=jqr] button.ant-btn-icon-only", "selector": "#field68029", "fieldname": "jqr",
+                        "expect_dialog": "多人力资源", "dialog_kind": "person-list", "optional": true,
+                        "search": true, "search_input_placeholder": "请输入关键字搜索", "search_value": "张成", "pick": "张成",
+                        "confirm_button": "确 定", "list_selector": ".wea-crm-list",
+                        "note": "阶段2实测：弹窗为 li/div 人员列表(.wea-crm-list)+确定按钮，两个搜索框都无 id。**注意：chrome.fill 写入搜索框不触发远程搜索**（列表仍显示『没有可显示的数据』），需要真实键盘事件；当前标记 optional，未跑通时记 skipped 并如实报告，不阻塞整单" },
+    "关联STO单号":     { "type": "browser", "widget": "[data-fieldname=glcgdd] button.ant-btn-icon-only", "selector": "#field96456", "fieldname": "glcgdd",
+                        "expect_dialog": "SAP采购订单", "search": false, "pick": "", "optional": true,
+                        "note": "阶段2实测：弹窗 SAP采购订单，10 行，列=PO单号/业务类型/采购主体/...；非必填，数据未给则跳过" },
+
+    "SAP项目号":       { "type": "derived", "selector": "#field84777", "fieldname": "sapxmhnew", "required": true, "derived_from": "项目号(xmh)", "note": "页面实测必填；由项目号派生（100167003201 → 67003201），引擎跳过" }
+  },
+  "value_catalog": {
+    "_note": "探查阶段（oa-explore-options.mjs）实测到的候选值。校验器用它判断用户给的值是否在已知范围内；不在范围内的会被列为「待用户确认」，不硬填。",
+    "采购类型": ["普通", "CR变更", "小批量"],
+    "项目节点": ["G1之前", "G1-R1", "G2-R2", "R2-R3", "R3-G3", "G3-R4", "R4-G4", "G4-G5", "G5-G6", "G6-G7", "G7-G8", "G4之后", "N.A."],
+    "组合管理分类": ["产品开发", "生命周期", "技术开发", "N.A."],
+    "指定供应商": ["指定供应商", "不指定供应商"],
+    "无IT类采购": ["有IT类采购", "无IT类采购"],
+    "非化学品": ["非化学品", "化学品", "危险化学品", "易制毒易制爆剧毒", "属于PPE(个人防护用品)", "属于特种设备"],
+    "用于型式检测样机或临床样机": ["用于型式检测样机或临床样机", "不用于型式检测样机或临床样机"],
+    "有固定资产/无形资产/在建工程": ["有固定资产/无形资产/在建工程", "无固定资产/无形资产/在建工程"],
+    "固资存放公司内部": ["固资存放公司内部", "固资存放供应商处"],
+    "工厂": ["上海联影生产工厂-MR", "上海联影生产工厂-CT", "上海联影生产工厂-MI", "上海联影生产工厂-XR", "上海联影生产工厂-RT", "上海联影生产工厂-CO", "上海联影生产工厂-MPS", "上海联影生产工厂-HSW"]
+  },
+  "dialog_catalog": {
+    "_note": "阶段 2 实测的「字段 → 弹窗」身份表。弹窗身份会随上游状态变化，所以这里记录的是观察时的状态；运行时应先确认弹窗标题再选行。",
+    "xmh": { "title": "SAP_项目号", "headers": ["内部订单", "订单类型", "订单描述", "公司代码", "业务范围", "负责人"], "rows": 10, "search_box_ids": ["con57290_value", "con57291_value", "con57292_value"], "has_confirm": false },
+    "lcck": { "title": "SAP工厂", "headers": ["工厂描述", "工厂组织", "工厂编码"], "rows": 8, "search_box_ids": ["con65646_value", "con65647_value"], "has_confirm": false },
+    "jf": { "title": "经费号_SAP采购", "headers": ["经费号"], "rows": 1, "search_box_ids": ["jfh", "xmh"], "has_confirm": false, "note": "实测只有 1 行且值就是 0；经费号无法用项目号搜出结果" },
+    "bz": { "title": "SAP_币种", "headers": ["币种编码", "币种名称"], "rows": 10, "search_box_ids": ["con57482_value", "con57483_value"], "has_confirm": false },
+    "jqr": { "title": "多人力资源", "headers": [], "rows": 0, "search_box_ids": [null, null], "has_confirm": true, "note": "弹窗初始 0 行，需按关键字搜索后才出行；有「确定」按钮（与其它弹窗不同）" },
+    "glcgdd": { "title": "SAP采购订单", "headers": ["PO单号", "业务类型", "采购主体", "采购单类型", "订单总额(不含税)", "付款条件", "供应商"], "rows": 10, "search_box_ids": [null], "has_confirm": false }
+  },
+  "state_rules": {
+    "_note": "阶段2补探查得到的『状态 → 行为』规则。模板不能假设字段在各状态下行为一致。",
+    "采购类型=CR变更": {
+      "项目号": "实测：弹窗能搜到并选中 100167003201，但点行后 OA 会把字段改回 0（无项目）。对照实验：同一弹窗同一行在『普通』态下正常回填 100167003201。因此这是 OA 业务规则（CR 变更需走 ECO 关联，不允许自由指定项目），**不是脚本缺陷**，无法在引擎侧修复。",
+      "证据": "普通态 after.text=100167003201；CR变更态 after.text=0"
+    }
+  },
+  "radios": [
+    "指定供应商", "无IT类采购", "非化学品", "用于型式检测样机或临床样机",
+    "有固定资产/无形资产/在建工程", "固资存放公司内部"
+  ],
+  "detail_columns": {
+    "add": "#addbutton0",
+    "note": "主表没有「工厂」字段 —— 工厂是明细行/接收方式侧的信息，不在主表 data-fieldname 清单内（31 个已渲染字段中无 lcck）。列映射依据 data-fieldname 对齐，不按视觉列序。",
+    "columns": {
+      "物料号": { "selector": "#field67932_N", "fieldname": "wlh" },
+      "品名描述": { "selector": "#field67936_N", "fieldname": "pmms", "derived": true },
+      "物料大类": { "selector": "#field67975_N", "fieldname": "wlzl" },
+      "物料中类": { "selector": "#field67969_N", "fieldname": "cgwllb" },
+      "单位": { "selector": "#field67937_N", "fieldname": "dw" },
+      "数量": { "selector": "#field67938_N", "required": true, "fieldname": "sl" },
+      "预估单价(未税)": { "selector": "#field67939_N", "required": true, "fieldname": "wsdj" },
+      "预估总价(未税)": { "selector": "#field67940_N", "fieldname": "wszj", "derived": true },
+      "供应商及品牌": { "selector": "#field67935_N", "required": true, "fieldname": "gysjpp" },
+      "MPN型号": { "selector": "#field67979_N", "fieldname": "mpn" },
+      "图号版本": { "selector": "#field67934_N", "fieldname": "tzbb" },
+      "物料版本": { "selector": "#field67933_N", "fieldname": "wlbb" }
+    }
+  },
+  "notes": {
+    "form_id": "workflowid=2562",
+    "required_main_text": ["联系电话", "CR/ECO NO.", "指定供应商名称", "指定供应商原因", "采购需求说明", "申请原因"],
+    "still_unconfirmed": "经费属性(ck) 的值域（是否需从弹窗选、可选值有哪些）尚未实测确认；工厂在主表不存在，若业务必需则需在明细行或接收方式侧处理。"
+  }
+}

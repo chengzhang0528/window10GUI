@@ -1,11 +1,11 @@
 ---
 name: deskpilot-flow-evolution
-description: Complete DeskPilot Web UI goals through observation and short continuous action batches, adapting to the current page and retaining reusable JSON only when useful. Use when the user names a website and a feature to operate, test or configure, and for scenario reuse, recovery and reducing model round trips; does not change the target application or deploy it.
+description: Complete DeskPilot Web UI goals through observation and short continuous action batches, adapting to the current page, and settle what is learned into the right reusable layer. Use when the user names a website and a feature to operate, test or configure; for scenario reuse, recovery and reducing model round trips; and when consolidating how a site was explored so the next one does not restart from zero. Owns the universal/site-specific pitfall split and the trap ledger; does not change the target application or deploy it.
 ---
 
 # DeskPilot Flow Evolution
 
-Use [deskpilot-core](../deskpilot-core/SKILL.md) and [deskpilot-browser](../deskpilot-browser/SKILL.md) for actual operations. The [product contract](../../../文档/项目/项目_windows-agent-cli/PRODUCT_CONTRACT.md) owns the goal; [host usage](../../../src/DeskPilot.Flow/README.md) owns invocation and supported fields. This skill owns the method, not website selectors or test expectations.
+Use [deskpilot-core](../deskpilot-core/SKILL.md) and [deskpilot-browser](../deskpilot-browser/SKILL.md) for actual operations. The [product contract](../../../文档/项目/项目_windows-agent-cli/PRODUCT_CONTRACT.md) owns the goal; [host usage](../../../src/DeskPilot.Flow/README.md) owns invocation and supported fields. This skill owns the method — including how exploration results are settled into reusable knowledge — not website selectors or test expectations.
 
 ## Default from a website and a feature
 
@@ -16,6 +16,21 @@ Treat a short request such as “这个网站，验证选项集功能” as an o
 - For testing, use isolated synthetic records within the authorized scope and clean up only owned data. For a requested lasting configuration, verify persistence and retain the desired configuration instead of deleting it as test cleanup. A new URL does not carry XRain's demo-login permission or authorize unrelated records, messaging, purchases, publishing or target application deployment.
 - Default actual website discovery, replay and recovery to a Luna subagent using DeskPilot, preserving this user's established execution preference unless overridden. Give one agent exclusive desktop ownership. If the requested model or executor is unavailable, report that concrete limitation; do not silently claim equivalent verification.
 - Finish with the verified business outcome and final data state. Include a replay entry only if a reusable flow was actually retained; include negative-case coverage when it belongs to the requested testing goal. A completed one-off operation does not require an artifact. This skill is an Agent execution policy, not a background scheduler or an autonomous model inside the CLI.
+
+## Settle what you learn (so the next site does not restart from zero)
+
+Exploration produces knowledge; it is only reusable if it lands in the right layer. Every trap is either **universal** (same trap+fix on another site: React/Vue/ant-design/DeskPilot-level) or **site-specific** (one site's control shapes, field ids, account scope, business behavior).
+
+| Kind | Settle into |
+|---|---|
+| Universal | [deskpilot-browser/references/universal-pitfalls.md](../deskpilot-browser/references/universal-pitfalls.md)（分册：`-14-18` / `-19-21` / `-22-27` / `-28-30`，同名目录） |
+| Site-specific | that site's skill `references/` (e.g. [deskpilot-oa-fill/references/oa-pitfalls.md](../deskpilot-oa-fill/references/oa-pitfalls.md)) |
+
+- **Record every trap immediately**, before solving it, in [references/pitfall-ledger.md](references/pitfall-ledger.md) with status `open`; when solved+settled, flip it to `settled` with a link to where the full text went. The ledger is the proof a trap was captured — do not rely on remembering it.
+- **Close out the ledger before ending**: walk every `open` row; none may remain. An `open` row is unfinished work, not a job well done.
+- **Re-read before writing**: check the ledger and the target site's references first, so you extend rather than duplicate.
+- Each settled entry carries 现象 / 根因 / 解法 / 验证, from real observation only — never speculation recorded as a fix.
+- **Report in actionable terms**: state what is settled, what remains `open`, and what the user must decide or supply next. User-supplied data is usually incomplete — per gap give the scope, the field, why it is missing (absent vs still a placeholder) and where to supply it, then the next step. Never stop at a bare error code, never invent a business value, and for a stateful target say why the gap must close first (a mid-run failure on an idle-timeout form loses the whole entry).
 
 ## Choose and execute
 

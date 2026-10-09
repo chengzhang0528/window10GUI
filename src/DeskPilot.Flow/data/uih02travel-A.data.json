@@ -1,0 +1,24 @@
+{
+  "form_key": "uih02-travel-reimbursement",
+  "scenario": "UIH-02-差旅-A",
+  "submitted_by": "张成",
+  "note": "UIH-02 国内差旅报销-SAP：只含业务值，无 selector/widget。字段名与 templates/uih02travel-reimbursement.template.json 的 field_map key 一致。只读字段（申请人/申请日期/成本中心/申请部门/Org_ID/电子发票/拆分发票）无需提供。",
+
+  "values": {
+    "联系电话": "18800107100",
+    "事由描述": "赴北京参加行业技术交流会议，往返差旅费用报销。本单仅用于 DeskPilot 自动化链路验证，不实际提交。",
+
+    "目的城市": "北上广深",
+    "开始日期": "2026-09-23",
+    "结束日期": "2026-09-24",
+
+    "附件": { "name": "deskpilot-travel-probe.txt", "content": "DeskPilot 差旅报销附件上传链路验证（内容由脚本构造，非真实票据）。" }
+  },
+
+  "detail_rows": [
+    {
+      "费用说明": "DeskPilot 验证用差旅费用条目",
+      "申报金额": 1200
+    }
+  ]
+}

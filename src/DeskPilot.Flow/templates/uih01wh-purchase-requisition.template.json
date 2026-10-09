@@ -1,0 +1,75 @@
+{
+  "form_key": "uih01-wh-purchase-requisition",
+  "biz_name": "UIH-01 采购申请单(武汉联影/湖北智造)-SAP",
+  "recorded_at": "2026-09-23",
+  "recorded_from": "阶段1 普查（oa-explore-form.mjs，60 字段/20 已渲染）+ 阶段2 穷尽（oa-explore-options.mjs，3 select + 12 browser）实测导出；workflowid=2892。字段→selector 由页面 [data-fieldname] 与内部 input.id 直接导出，非推测。",
+  "entry": {
+    "url": "https://oa.united-imaging.com/wui/index.html#/main/workflow/add",
+    "card": { "selector": "a", "text_contains": "UIH-01 采购申请单(武汉联影/湖北智造)-SAP" },
+    "attach": { "url_contains": "static4form" }
+  },
+  "field_map": {
+    "标题":            { "type": "text", "selector": "#requestname", "required": true, "fieldname": "requestname" },
+
+    "业务实体":        { "type": "browser", "widget": "[data-fieldname=ywst2] button.ant-btn-icon-only", "selector": "[data-fieldname=ywst2]", "fieldname": "ywst2",
+                        "expect_dialog": "SAP采购组织", "search": false, "pick": "武汉联影医疗科技有限公司",
+                        "note": "阶段2实测：弹窗「SAP采购组织」5 行，列=采购组织描述/采购组织代码。武汉主体与上海不同，故指定武汉联影医疗科技有限公司" },
+    "币种":            { "type": "browser", "widget": "[data-fieldname=bz] button.ant-btn-icon-only", "selector": "#field68134", "fieldname": "bz",
+                        "expect_dialog": "SAP_币种", "search": true, "search_box_id": "con57483_value", "search_value": "CNY", "pick": "CNY",
+                        "note": "阶段4实测：本变体的币种输入是 **#field68134**（上海的 #field68004 在本变体**不存在**）。此前误抄上海的 selector，导致 pick 明明成功、回读却读空 → 假失败 NOT_FILLED。搜索框沿用 con57483_value（标签顺序与表头相反，CNY 是编码）。" },
+    "项目号":          { "type": "browser", "widget": "[data-fieldname=xmh] button.ant-btn-icon-only", "selector": "[data-fieldname=xmh]", "fieldname": "xmh", "required": true,
+                        "expect_dialog": "SAP_项目号", "search": true, "search_box_id": "con57290_value",
+                        "note": "阶段2实测：弹窗 10 行，列=内部订单/订单类型/订单描述/公司代码/业务范围/负责人；搜索框 con57290_value。**本变体列的是武汉项目（100310xxxxxx，公司代码 1003）**，上海的 100167003201（公司 1001）不在其中 —— 跨变体套用项目号会被 row_not_found 正确拦下。" },
+    "经费":            { "type": "browser", "widget": "[data-fieldname=jf] button.ant-btn-icon-only", "selector": "[data-fieldname=jf]", "fieldname": "jf", "required": true,
+                        "expect_dialog": "经费号_SAP采购", "search": false, "pick": "0",
+                        "note": "沿用上海结论：弹窗只有 1 行且值=0，用项目号搜不出结果，故 search:false 直接选唯一的 0" },
+    "加签人":          { "type": "browser", "widget": "[data-fieldname=jqr] button.ant-btn-icon-only", "selector": "[data-fieldname=jqr]", "fieldname": "jqr", "optional": true,
+                        "expect_dialog": "多人力资源", "dialog_kind": "person-list",
+                        "search": true, "search_input_placeholder": "请输入关键字搜索", "search_value": "张成", "pick": "张成",
+                        "confirm_button": "确 定", "list_selector": ".wea-crm-list",
+                        "note": "阶段4实测：本变体的弹窗标题是「**多人力资源**」，不是 UIH-01 上海的「人力资源」—— 变体间弹窗标题会不同，必须按本表单实测值写 expect_dialog，否则会被 WRONG_DIALOG 正确拦下。" },
+
+    "采购类型":        { "type": "select", "widget": "#weaSelect_1", "selector": "#weaSelect_1", "fieldname": "cglx", "required": true, "default": "普通" },
+    "项目节点":        { "type": "select", "widget": "#weaSelect_3", "selector": "#weaSelect_3", "fieldname": "xmjd", "required": true },
+    "组合管理分类":    { "type": "select", "widget": "#weaSelect_4", "selector": "#weaSelect_4", "fieldname": "zhglfl", "required": true },
+
+    "采购需求说明":    { "type": "text", "selector": "#field68162", "fieldname": "cgxqsm" },
+    "申请原因":        { "type": "text", "selector": "#field68136", "fieldname": "sqyy" },
+
+    "采购组织":        { "type": "conditional-detail", "widget": "[data-fieldname=gc] button.ant-btn-icon-only", "selector": "[data-fieldname=gc]", "fieldname": "gc",
+                        "expect_dialog": "SAP采购组织", "search": false,
+                        "note": "阶段1实测：本表单**默认状态下未渲染**（visible=false, 0×0）—— 是被上游取值条件隐藏，不是滚动问题。故用 conditional-detail：引擎只在它可见时才填，不可见则记 skipped(conditional_hidden) 且不算失败。" },
+    "采购大类小类":    { "type": "conditional-detail", "widget": "[data-fieldname=cgdlxs] button.ant-btn-icon-only", "selector": "[data-fieldname=cgdlxs]", "fieldname": "cgdlxs",
+                        "expect_dialog": "SAP_采购大类小类", "search": false,
+                        "note": "阶段1实测：默认未渲染（0×0），同 gc 处理" },
+    "寻源":            { "type": "conditional-detail", "widget": "[data-fieldname=sourcing] button.ant-btn-icon-only", "selector": "[data-fieldname=sourcing]", "fieldname": "sourcing",
+                        "expect_dialog": "SAP_寻源", "search": false,
+                        "note": "阶段1实测：默认未渲染（0×0），同 gc 处理" },
+    "申请部门":        { "type": "conditional-detail", "widget": "[data-fieldname=sqbm] button.ant-btn-icon-only", "selector": "[data-fieldname=sqbm]", "fieldname": "sqbm",
+                        "expect_dialog": "部门", "dialog_kind": "person-list", "search": true, "search_input_placeholder": "请输入关键字搜索", "search_value": "测试部", "pick": "测试部",
+                        "confirm_button": "确 定", "list_selector": ".wea-crm-list",
+                        "note": "阶段1实测：默认未渲染（0×0），同 gc 处理。阶段4报 no_search_value —— search:true 必须同时给 search_value，否则引擎无从搜索" },
+    "经费负责人":      { "type": "conditional-detail", "widget": "[data-fieldname=jffzr] button.ant-btn-icon-only", "selector": "[data-fieldname=jffzr]", "fieldname": "jffzr",
+                        "expect_dialog": "人力资源", "dialog_kind": "person-list", "search": true, "search_input_placeholder": "请输入关键字搜索", "search_value": "张成", "pick": "张成",
+                        "confirm_button": "确 定", "list_selector": ".wea-crm-list",
+                        "note": "阶段1实测：默认未渲染（0×0），同 gc 处理" }
+  },
+  "value_catalog": {
+    "_note": "阶段2实测候选值（武汉变体）。",
+    "采购类型": ["普通", "CR变更", "小批量试制", "代理销售"],
+    "项目节点": ["G1之前", "G1-R1", "G2-R2", "R2-R3", "R3-G3", "G3-R4", "R4-G4", "G4-G5", "G5-G6", "G6-G7", "G7-G8", "G4之后", "N.A."],
+    "组合管理分类": ["产品开发", "生命周期", "技术开发", "N.A."]
+  },
+  "readonly_fields": ["prlsh", "sqr", "sqrq", "ck", "xmjl", "ywfl", "cgdlx", "hjwsje", "sapxmhnew"],
+  "radios": ["指定供应商", "不指定供应商", "有IT类采购", "无IT类采购", "非化学品", "化学品",
+             "危险化学品", "易制毒易制爆剧毒", "属于PPE(个人防护用品)", "属于特种设备",
+             "用于型式检测样机或临床样机", "不用于型式检测样机或临床样机",
+             "有固定资产/无形资产/在建工程", "没有固定资产/无形资产/在建工程",
+             "固资存放公司内部", "固资存放供应商处"],
+  "notes": {
+    "form_id": "workflowid=2892",
+    "phase2_summary": "已渲染 20 字段；可交互 = select 3 + browser 12。所有弹窗已逐个实测标题与行数并确认关闭后残留为 0。",
+    "variant_of": "uih01-purchase-requisition（上海联影）。**这是组织变体，不是副本**：实测共有字段基本相同，但仅武汉有 13 个字段（gc/cx/sourcing/cgdlxs/sqbm/sqbu/zkzjh/ywfl/probudtotle/sfwhly/lcbhqf2/sfwwhlyscgcmps/ifrdproject 等）、仅上海有 19 个（lcck/glcgdd/shfbuz/ckzjh/gsmc 等）。",
+    "radio_label_gotcha": "**同一单选的选项文本在不同组织变体里不同**：上海是「无固定资产/无形资产/在建工程」，武汉是「**没有**固定资产/无形资产/在建工程」。单选按 innerText 精确匹配，选项名必须逐字照抄当前表单，不能跨变体复制。",    "unconfirmed": "武汉变体特有的 browser 字段（gc/cgdlxs/sourcing/sqbm/jffzr）只完成了「弹窗身份 + 搜索框」的枚举，尚未在数据层面确定业务取值；本模板一律标 optional，未给 pick。"
+  }
+}

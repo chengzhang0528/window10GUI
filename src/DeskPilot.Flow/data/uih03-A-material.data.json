@@ -1,0 +1,18 @@
+{
+  "form_key": "uih03-erp-material-application",
+  "scenario": "UIH-03-A-服务类物料",
+  "submitted_by": "张成",
+  "note": "UIH-01 ERP物料申请单：只含业务值，无 selector/widget。values 对应模板 field_map，detail_rows 对应模板 detail_columns。",
+
+  "values": {
+    "第三方物料预期用途": "DeskPilot 端到端验证，不实际提交。"
+  },
+
+  "detail_rows": [
+    {
+      "物料编码": "DP-VERIFY-0001",
+      "物料描述": "DeskPilot 自动化链路验证用物料（虚拟），不用于真实申请。",
+      "物料类型": "服务类物料申请"
+    }
+  ]
+}

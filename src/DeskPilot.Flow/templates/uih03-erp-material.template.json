@@ -1,0 +1,65 @@
+{
+  "form_key": "uih03-erp-material-application",
+  "biz_name": "UIH-01 ERP物料申请单-SAP",
+  "recorded_at": "2026-09-23",
+  "recorded_from": "阶段1 普查 + 阶段2 穷尽实测导出；workflowid=2226。",
+  "entry": {
+    "url": "https://oa.united-imaging.com/wui/index.html#/main/workflow/add",
+    "card": { "selector": "a", "text_contains": "UIH-01 ERP物料申请单-SAP" },
+    "attach": { "url_contains": "static4form" }
+  },
+  "field_map": {
+    "第三方物料预期用途": { "type": "text", "selector": "#field67826", "fieldname": "dsfwlyqyt" },
+    "第三方物料供应商信息": { "type": "text", "selector": "#html5_1k36tq4a63q4ln518uoust1cvv8", "fieldname": "dsfwlgysxx", "readonly": true,
+                              "note": "阶段1实测：该字段是富文本编辑器（iframe/ckeditor 容器），非普通 input；标 readonly 跳过，不硬填" },
+
+    "业务实体":          { "type": "browser", "widget": "[data-fieldname=ywst] button.ant-btn-icon-only", "selector": "[data-fieldname=ywst]", "fieldname": "ywst",
+                           "expect_dialog": "SAP_内部往来", "search": true, "search_index": 0, "optional": true,
+                           "search_value": "上海联影", "pick": "上海联影医疗科技股份有限公司",
+                           "note": "阶段2实测：弹窗 SAP_内部往来 5 行" },
+    "成本中心":          { "type": "browser", "widget": "[data-fieldname=cbzx] button.ant-btn-icon-only", "selector": "[data-fieldname=cbzx]", "fieldname": "cbzx",
+                           "expect_dialog": "SAP_成本中心", "search": false, "pick": "", "optional": true,
+                           "note": "阶段2实测：弹窗 SAP_成本中心 10 行；非必填故不指定 pick" },
+    "工厂":              { "type": "browser", "widget": "[data-fieldname=bu2] button.ant-btn-icon-only", "selector": "[data-fieldname=bu2]", "fieldname": "bu2",
+                           "expect_dialog": "SAP工厂", "search": false, "pick": "上海联影生产工厂-CO", "optional": true,
+                           "note": "阶段2实测：弹窗 SAP工厂 rows=0（该状态下无候选）" },
+    "物料单位":          { "type": "browser", "widget": "[data-fieldname=dw] button.ant-btn-icon-only", "selector": "[data-fieldname=dw]", "fieldname": "dw",
+                           "expect_dialog": "SAP_计量单位", "search": false, "pick": "", "optional": true,
+                           "note": "阶段2实测：弹窗 SAP_计量单位 10 行" },
+    "物料小类":          { "type": "browser", "widget": "[data-fieldname=wlxl] button.ant-btn-icon-only", "selector": "[data-fieldname=wlxl]", "fieldname": "wlxl",
+                           "expect_dialog": "SAP_物料小类", "search": false, "pick": "", "optional": true,
+                           "note": "阶段2实测：弹窗 SAP_物料小类 rows=0（该状态下无候选）" },
+    "税率":              { "type": "browser", "widget": "[data-fieldname=sl1] button.ant-btn-icon-only", "selector": "[data-fieldname=sl1]", "fieldname": "sl1",
+                           "expect_dialog": "SAP_税率/税码", "search": false, "pick": "", "optional": true,
+                           "note": "阶段2实测：弹窗 SAP_税率/税码 7 行" },
+    "成本中心负责人":    { "type": "browser", "widget": "[data-fieldname=cbzxfzr] button.ant-btn-icon-only", "selector": "[data-fieldname=cbzxfzr]", "fieldname": "cbzxfzr",
+                           "expect_dialog": "人力资源", "dialog_kind": "person-list", "optional": true,
+                           "search": true, "search_input_placeholder": "请输入关键字搜索", "search_value": "张成", "pick": "张成",
+                           "confirm_button": "确 定", "list_selector": ".wea-crm-list" },
+    "申请人":            { "type": "browser", "widget": "[data-fieldname=sqr] button.ant-btn-icon-only", "selector": "[data-fieldname=sqr]", "fieldname": "sqr",
+                           "expect_dialog": "人力资源", "dialog_kind": "person-list", "optional": true,
+                           "search": true, "search_input_placeholder": "请输入关键字搜索", "search_value": "张成", "pick": "张成",
+                           "confirm_button": "确 定", "list_selector": ".wea-crm-list" }
+  },
+  "detail_columns": {
+    "add": "#addbutton0",
+    "note": "阶段4实测（2026-09-23）：物料编码/物料描述/物料类型原本被错放在 field_map 里、写死 _0，导致每步 verified:true 但回读恒空。根因是 OA 的 excelDetailTable 中 **`_0` 是占位行（未 swap，恒 0×0），真实数据行从 `_1` 开始**；且数据里的 detail_rows 根本没提供。现改为标准明细结构：引擎会先点「新增行」再按**已渲染的真实行号**写列（见 universal-pitfalls #19）。",
+    "columns": {
+      "物料编码": { "selector": "#field67789_N", "fieldname": "wlbm", "required": true },
+      "物料描述": { "selector": "#field67785_N", "fieldname": "wlsm", "required": true },
+      "物料类型": { "type": "select", "widget": "#weaSelect_6", "selector": "#weaSelect_6", "fieldname": "wllx", "required": true,
+                    "note": "明细行里的 select，容器 div#weaSelect_6.wea-select。同一 fieldname 在主表也有一份（w=0 隐藏），普查去重后保留已渲染的明细行这个" }
+    }
+  },
+  "value_catalog": {
+    "_note": "阶段2实测候选值。",
+    "物料类型": ["第三方物料申请", "跨年零价值物料", "服务类物料申请", "物料分配工厂"]
+  },
+  "readonly_fields": ["lcbh", "sfyyeslylqxwl", "sqrbm", "sqrbu", "zdcgy", "wldl", "ylqx", "wlzl", "zczyxq", "zzwlh", "erpyscwlh", "txsm", "cpzczh", "cpxh", "zcrmc"],
+  "notes": {
+    "form_id": "workflowid=2226",
+    "phase2_summary": "已渲染 28 字段；可交互 9 个（select 1 / browser 8）。8 个弹窗已逐个实测标题与行数。",
+    "duplicate_fieldname": "wllx 同时存在于明细行(可交互 select)与主表(w=0 隐藏 text)；普查去重后保留已渲染的那个。",
+    "detail_row_index": "明细数据行号从 _1 起，_0 恒为占位行 —— 不要硬编码 _0。"
+  }
+}

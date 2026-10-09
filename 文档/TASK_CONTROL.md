@@ -4,7 +4,7 @@ Status: Active
 Kind: TaskControl
 Scope: coder_driver-template / 可恢复活动任务
 Owner: 项目维护者
-Updated: 2026-08-31
+Updated: 2026-10-08
 Depends On:
 - ../AGENTS.md
 
@@ -14,6 +14,7 @@ Depends On:
 
 | ID | 状态 | 执行类型 | 范围 | 候选/制品 | 下一可验证结果 | 入口 |
 |---|---|---|---|---|---|---|
+| T-WF-OA-COMPONENT | Review | Development | 联影总部 OA 表单填写能力：组件分类 + WfForm 写值路径，并与工作区 skill 合并为唯一所有者 | - | 已达成（2026-10-08）：`wf-explore-components.js` 判 `项目号=browser`、`wf-fill-by-component.js` 对 browser 显式给值仍 `needs-dialog-pick`+`refused`、整轮连续 pass 填 6 字段 + 3 个真实选项 + 项目号弹框选行，且 `项目号` 所在 `tr` 3.12s 内 **0 次变更**。下一可选结果：把这套机制推广到第二张 OA 表单（如 UIH-02 借款单）并确认组件目录可复用 | `.agents/skills/deskpilot-oa-fill/SKILL.md` |
 
 ## 维护规则
 

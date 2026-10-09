@@ -258,16 +258,29 @@ internal sealed class ChromeCdpProvider : IDisposable
         List<ChromeTarget> matches;
         try
         {
-            matches = GetTargets(_endpoint!).Where(target =>
-                string.Equals(target.Type, "page", StringComparison.OrdinalIgnoreCase) &&
-                (string.IsNullOrWhiteSpace(targetId) || string.Equals(target.Id, targetId, StringComparison.Ordinal)) &&
-                (string.IsNullOrWhiteSpace(urlContains) || target.Url.Contains(urlContains, StringComparison.OrdinalIgnoreCase)) &&
-                (string.IsNullOrWhiteSpace(titleContains) || target.Title.Contains(titleContains, StringComparison.OrdinalIgnoreCase))).ToList();
+            matches = SelectTargets(targetId, urlContains, titleContains);
         }
         catch (Exception ex)
         {
             throw new AgentException("CHROME_CDP_UNAVAILABLE", $"Unable to select a Chrome target: {ex.Message}", true,
                 new { endpoint = _endpoint });
+        }
+
+        // A target_id identifies one specific page, so a miss on the current endpoint
+        // means the current endpoint is the wrong browser -- not that the page vanished.
+        // Re-resolve across reachable endpoints (including a managed endpoint recorded on
+        // a dynamic port) instead of failing against a stale/foreign connection.
+        if (matches.Count == 0 && !string.IsNullOrWhiteSpace(targetId) && TryAttachToTargetId(targetId!, urlContains, titleContains))
+        {
+            try
+            {
+                matches = SelectTargets(targetId, urlContains, titleContains);
+            }
+            catch (Exception ex)
+            {
+                throw new AgentException("CHROME_CDP_UNAVAILABLE", $"Unable to select a Chrome target: {ex.Message}", true,
+                    new { endpoint = _endpoint });
+            }
         }
 
         if (matches.Count == 0)
@@ -589,11 +602,18 @@ internal sealed class ChromeCdpProvider : IDisposable
     internal object Click(JsonElement parameters)
     {
         Ensure(parameters);
-        var selector = GetRequiredString(parameters, "selector", "css");
+        var selector = GetOptionalString(parameters, "selector", "css");
+        var text = GetOptionalString(parameters, "text", "label");
+        if (string.IsNullOrWhiteSpace(selector) && string.IsNullOrWhiteSpace(text))
+            throw new AgentException("INVALID_ARGUMENT", "chrome.click requires selector or text.", false);
         var timeout = GetTimeout(parameters, 30000);
-        ThrowIfPageUnavailable(ReadPageStatus(Math.Min(2000, timeout)), "interaction", 0, timeout, selector);
+        var targetDescription = selector ?? $"text:{text}";
+        ThrowIfPageUnavailable(ReadPageStatus(Math.Min(2000, timeout)), "interaction", 0, timeout, targetDescription);
+        var resolve = string.IsNullOrWhiteSpace(selector)
+            ? $"const wanted={JsString(text!)}; const normalize=v=>String(v??'').replace(/\\s+/g,'').toLocaleLowerCase(); const wantedNormalized=normalize(wanted); const el=Array.from(document.querySelectorAll('button,input[type=button],input[type=submit],[role=button],a')).find(candidate=>{{const r=candidate.getBoundingClientRect(),s=getComputedStyle(candidate); const value=normalize(candidate.innerText||candidate.textContent||candidate.value); return value===wantedNormalized && r.width>0 && r.height>0 && s.display!=='none' && s.visibility!=='hidden' && !candidate.disabled;}});"
+            : $"const el=document.querySelector({JsString(selector!)});";
         var script = "(() => {" +
-            $"const el=document.querySelector({JsString(selector)});" +
+            resolve +
             "if (!el) return {found:false};" +
             "el.scrollIntoView({block:'center',inline:'center'});" +
             "const r=el.getBoundingClientRect(); const s=getComputedStyle(el);" +
@@ -602,22 +622,22 @@ internal sealed class ChromeCdpProvider : IDisposable
         var result = EvaluateValue(script, timeout);
         if (result.ValueKind != JsonValueKind.Object || !result.TryGetProperty("found", out var found) || found.ValueKind != JsonValueKind.True)
         {
-            throw new AgentException("CHROME_ELEMENT_NOT_FOUND", "No page element matched the supplied selector.", true, new { selector });
+            throw new AgentException("CHROME_ELEMENT_NOT_FOUND", "No visible page element matched the supplied selector or text.", true, new { selector, text });
         }
         if (!result.TryGetProperty("visible", out var visible) || visible.ValueKind != JsonValueKind.True)
         {
-            throw new AgentException("CHROME_ELEMENT_NOT_ACTIONABLE", "The matched page element is not visible in the viewport.", true, new { selector });
+            throw new AgentException("CHROME_ELEMENT_NOT_ACTIONABLE", "The matched page element is not visible in the viewport.", true, new { selector, text });
         }
         if (result.TryGetProperty("disabled", out var disabled) && disabled.ValueKind == JsonValueKind.True)
         {
-            throw new AgentException("CHROME_ELEMENT_NOT_ACTIONABLE", "The matched page element is disabled.", true, new { selector });
+            throw new AgentException("CHROME_ELEMENT_NOT_ACTIONABLE", "The matched page element is disabled.", true, new { selector, text });
         }
         var x = result.GetProperty("x").GetDouble();
         var y = result.GetProperty("y").GetDouble();
         Call("Input.dispatchMouseEvent", new { type = "mouseMoved", x, y }, timeout);
         Call("Input.dispatchMouseEvent", new { type = "mousePressed", x, y, button = "left", clickCount = 1 }, timeout);
         Call("Input.dispatchMouseEvent", new { type = "mouseReleased", x, y, button = "left", clickCount = 1 }, timeout);
-        return new { target_id = _targetId, selector, clicked = true, execution_layer = "cdp_input", result };
+        return new { target_id = _targetId, selector, text, clicked = true, execution_layer = "cdp_input", result };
     }
 
     /// <summary>
@@ -630,11 +650,17 @@ internal sealed class ChromeCdpProvider : IDisposable
         try
         {
             Ensure(parameters);
-            var selector = GetRequiredString(parameters, "selector", "css");
+            var selector = GetOptionalString(parameters, "selector", "css");
+            var text = GetOptionalString(parameters, "text", "label");
+            if (string.IsNullOrWhiteSpace(selector) && string.IsNullOrWhiteSpace(text)) return null;
             var timeout = GetTimeout(parameters, 2000);
-            ThrowIfPageUnavailable(ReadPageStatus(Math.Min(1000, timeout)), "interaction", 0, timeout, selector);
+            var targetDescription = selector ?? $"text:{text}";
+            ThrowIfPageUnavailable(ReadPageStatus(Math.Min(1000, timeout)), "interaction", 0, timeout, targetDescription);
+            var resolve = string.IsNullOrWhiteSpace(selector)
+                ? $"const wanted={JsString(text!)}; const normalize=v=>String(v??'').replace(/\\s+/g,'').toLocaleLowerCase(); const wantedNormalized=normalize(wanted); const el=Array.from(document.querySelectorAll('button,input[type=button],input[type=submit],[role=button],a')).find(candidate=>{{const r=candidate.getBoundingClientRect(),s=getComputedStyle(candidate); const value=normalize(candidate.innerText||candidate.textContent||candidate.value); return value===wantedNormalized && r.width>0 && r.height>0 && s.display!=='none' && s.visibility!=='hidden' && !candidate.disabled;}});"
+                : $"const el=document.querySelector({JsString(selector!)});";
             var script = "(() => {" +
-                $"const el=document.querySelector({JsString(selector)});" +
+                resolve +
                 "if (!el) return {found:false};" +
                 "el.scrollIntoView({block:'center',inline:'center'});" +
                 "const r=el.getBoundingClientRect(); const s=getComputedStyle(el);" +
@@ -1047,6 +1073,82 @@ internal sealed class ChromeCdpProvider : IDisposable
         };
     }
 
+    /// <summary>
+    /// Page targets on the current endpoint matching the supplied criteria.
+    /// </summary>
+    private List<ChromeTarget> SelectTargets(string? targetId, string? urlContains, string? titleContains)
+    {
+        return GetTargets(_endpoint!).Where(target =>
+            string.Equals(target.Type, "page", StringComparison.OrdinalIgnoreCase) &&
+            (string.IsNullOrWhiteSpace(targetId) || string.Equals(target.Id, targetId, StringComparison.Ordinal)) &&
+            (string.IsNullOrWhiteSpace(urlContains) || target.Url.Contains(urlContains, StringComparison.OrdinalIgnoreCase)) &&
+            (string.IsNullOrWhiteSpace(titleContains) || target.Title.Contains(titleContains, StringComparison.OrdinalIgnoreCase))).ToList();
+    }
+
+    /// <summary>
+    /// Endpoints worth probing when the requested target is not on the current one:
+    /// the loopback range, plus the endpoint recorded for the managed profile (which
+    /// uses a dynamic port and would otherwise never be reachable by enumeration).
+    /// </summary>
+    private IEnumerable<string> EnumerateCrossEndpointCandidates()
+    {
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        if (!string.IsNullOrWhiteSpace(_endpoint) && seen.Add(_endpoint!.TrimEnd('/')))
+        {
+            yield return _endpoint.TrimEnd('/');
+        }
+        var recorded = TryReadDevToolsEndpoint(GetDefaultManagedUserDataDir());
+        if (!string.IsNullOrWhiteSpace(recorded) && seen.Add(recorded!.TrimEnd('/')))
+        {
+            yield return recorded.TrimEnd('/');
+        }
+        foreach (var candidate in EnumerateEndpoints(null, null))
+        {
+            if (seen.Add(candidate)) yield return candidate;
+        }
+    }
+
+    /// <summary>
+    /// Attaches to whichever reachable endpoint owns the requested target, so that a
+    /// caller-supplied target_id always wins over a stale connection.
+    /// </summary>
+    private bool TryAttachToTargetId(string targetId, string? urlContains, string? titleContains)
+    {
+        foreach (var candidate in EnumerateCrossEndpointCandidates())
+        {
+            if (string.Equals(candidate, _endpoint?.TrimEnd('/'), StringComparison.OrdinalIgnoreCase) && IsConnected) continue;
+            var stage = "version";
+            try
+            {
+                var version = GetJson(candidate + "/json/version", 400);
+                if (!version.TryGetProperty("webSocketDebuggerUrl", out var websocketElement) ||
+                    websocketElement.ValueKind != JsonValueKind.String || string.IsNullOrWhiteSpace(websocketElement.GetString()))
+                    throw new AgentException("CDP_VERSION_INVALID", "Missing browser WebSocket URL.", true);
+                stage = "targets";
+                var target = GetTargets(candidate, 400).FirstOrDefault(item =>
+                    string.Equals(item.Type, "page", StringComparison.OrdinalIgnoreCase) &&
+                    string.Equals(item.Id, targetId, StringComparison.Ordinal) &&
+                    (string.IsNullOrWhiteSpace(urlContains) || item.Url.Contains(urlContains, StringComparison.OrdinalIgnoreCase)) &&
+                    (string.IsNullOrWhiteSpace(titleContains) || item.Title.Contains(titleContains, StringComparison.OrdinalIgnoreCase)));
+                if (target is null || string.IsNullOrWhiteSpace(target.WebSocketUrl))
+                    throw new AgentException("CDP_PAGE_TARGET_MISSING", "No page target with the requested id.", true);
+                stage = "websocket_or_initialization";
+                Disconnect();
+                Connect(candidate, target);
+                _profileMode = _managedProcess is null ? "existing_debug_session" : "managed";
+                return true;
+            }
+            catch (Exception ex)
+            {
+                if (_attachAttempts.Count < 32)
+                    _attachAttempts.Add(new { endpoint = candidate, stage, target_id = targetId,
+                        error_code = ex is AgentException agent ? agent.Code : ex.GetType().Name });
+                Disconnect();
+            }
+        }
+        return false;
+    }
+
     private bool TryAttach(string? endpoint, int? requestedPort)
     {
         foreach (var candidate in EnumerateEndpoints(endpoint, requestedPort))
@@ -1070,6 +1172,44 @@ internal sealed class ChromeCdpProvider : IDisposable
             {
                 if (_attachAttempts.Count < 32)
                     _attachAttempts.Add(new { endpoint = candidate, stage,
+                        error_code = ex is AgentException agent ? agent.Code : ex.GetType().Name });
+                Disconnect();
+            }
+        }
+        return false;
+    }
+
+    /// <summary>
+    /// Attaches to the endpoint that owns <paramref name="targetId"/>. Used when a
+    /// caller-supplied target_id does not belong to the current endpoint, so that a
+    /// stale persisted endpoint cannot capture every subsequent step.
+    /// </summary>
+    private bool TryAttachToTargetId(string targetId)
+    {
+        foreach (var candidate in EnumerateEndpoints(null, null))
+        {
+            var stage = "version";
+            try
+            {
+                var version = GetJson(candidate + "/json/version", 300);
+                if (!version.TryGetProperty("webSocketDebuggerUrl", out var websocketElement) ||
+                    websocketElement.ValueKind != JsonValueKind.String || string.IsNullOrWhiteSpace(websocketElement.GetString()))
+                    throw new AgentException("CDP_VERSION_INVALID", "Missing browser WebSocket URL.", true);
+                stage = "targets";
+                var target = GetTargets(candidate, 300).FirstOrDefault(item =>
+                    string.Equals(item.Type, "page", StringComparison.OrdinalIgnoreCase) &&
+                    string.Equals(item.Id, targetId, StringComparison.Ordinal));
+                if (target is null || string.IsNullOrWhiteSpace(target.WebSocketUrl))
+                    throw new AgentException("CDP_PAGE_TARGET_MISSING", "No page target with the requested target_id.", true);
+                stage = "websocket_or_initialization";
+                Disconnect();
+                Connect(candidate, target);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                if (_attachAttempts.Count < 32)
+                    _attachAttempts.Add(new { endpoint = candidate, stage, target_id = targetId,
                         error_code = ex is AgentException agent ? agent.Code : ex.GetType().Name });
                 Disconnect();
             }

@@ -1,0 +1,111 @@
+{
+  "schema_version": 1,
+  "scenario_id": "oa-uih01-purchase-requisition",
+  "inputs": {
+    "entryUrl": "https://oa.united-imaging.com/wui/index.html#/main/workflow/add?menuIds=1,12&menuPathIds=1,12&_key=5vd0uk",
+    "requestName": "UIH-01 采购申请单(上海联影)-SAP-DeskPilot功能验证"
+  },
+  "targets": {
+    "entryCard": {
+      "selector": "div.fontItem > a",
+      "text": { "contains": "UIH-01 采购申请单(上海联影)-SAP" }
+    },
+    "requestName": { "selector": "#requestname" }
+  },
+  "flows": {
+    "open_form": {
+      "flow_id": "uih01-open-form",
+      "revision": 2,
+      "timeout_ms": 180000,
+      "checks": {
+        "browserConnected": {
+          "predicate": { "type": "page", "url": { "contains": "united-imaging.com" } },
+          "timeout_ms": 30000, "poll_ms": 300, "stable_ms": 300
+        },
+        "workflowMenuReady": {
+          "predicate": {
+            "type": "page",
+            "url": { "contains": "workflow/add" },
+            "text": { "contains": ["新建流程", "全部流程"] }
+          },
+          "timeout_ms": 45000, "poll_ms": 300, "stable_ms": 500
+        },
+        "entryConsumed": {
+          "predicate": {
+            "type": "page",
+            "url": { "contains": "workflow/add" },
+            "text": { "contains": "新建流程" }
+          },
+          "timeout_ms": 20000, "poll_ms": 300, "stable_ms": 300
+        },
+        "formReady": {
+          "predicate": {
+            "type": "all",
+            "conditions": [
+              { "type": "page", "text": { "contains": "采购申请单" } },
+              { "type": "element", "target": "requestName", "count": { "equals": 1 }, "visible": true, "editable": true }
+            ]
+          },
+          "timeout_ms": 45000, "poll_ms": 400, "stable_ms": 600
+        },
+        "titleApplied": {
+          "predicate": {
+            "type": "element", "target": "requestName", "count": { "equals": 1 },
+            "value": { "equals": { "input": "requestName" } }
+          },
+          "timeout_ms": 20000, "poll_ms": 300, "stable_ms": 400
+        }
+      },
+      "steps": [
+        {
+          "id": "ensure",
+          "label": "连接受控 Chrome（已登录 OA）",
+          "timeout_ms": 60000,
+          "action": { "type": "ensure", "auto_start": true, "profile_mode": "managed" },
+          "expect": ["browserConnected"]
+        },
+        {
+          "id": "open_entry",
+          "label": "导航到新建流程入口页",
+          "timeout_ms": 60000,
+          "action": {
+            "type": "navigate",
+            "url": { "input": "entryUrl" },
+            "wait_until": "load",
+            "timeout_ms": 45000
+          },
+          "expect": ["workflowMenuReady"]
+        },
+        {
+          "id": "open_card",
+          "label": "点击采购申请单卡片（新标签页打开表单）",
+          "timeout_ms": 60000,
+          "consumes": ["open_entry.workflowMenuReady"],
+          "action": { "type": "click", "target": "entryCard", "timeout_ms": 30000 },
+          "min_delay_ms": 2500,
+          "expect": ["entryConsumed"]
+        },
+        {
+          "id": "attach_form",
+          "label": "切换到新建的表单标签页",
+          "timeout_ms": 60000,
+          "consumes": ["open_card.entryConsumed"],
+          "action": { "type": "attach", "url_contains": "static4form", "timeout_ms": 30000 },
+          "expect": ["formReady"]
+        },
+        {
+          "id": "fill_title",
+          "label": "填写标题",
+          "timeout_ms": 45000,
+          "consumes": ["attach_form.formReady"],
+          "action": {
+            "type": "fill", "target": "requestName",
+            "value": { "input": "requestName" }, "timeout_ms": 20000
+          },
+          "expect": ["titleApplied"]
+        }
+      ],
+      "final_checks": ["fill_title.titleApplied"]
+    }
+  }
+}
